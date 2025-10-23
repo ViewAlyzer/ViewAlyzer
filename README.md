@@ -80,6 +80,7 @@ Share how ViewAlyzer has helped in your projects
 - **Feature Requests:** Use GitHub [issues](../../issues) or [discussions](../../discussions)
 - **General Support:** [discussions](../../discussions) or support@viewalyzer.net
 
+
 ## Licensing
 
 **Recorder Firmware:** Open source (see LICENSE file)  
