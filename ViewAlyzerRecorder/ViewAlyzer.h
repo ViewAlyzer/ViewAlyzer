@@ -90,9 +90,10 @@ extern "C"
         VA_USER_TYPE_GAUGE = 2,
         VA_USER_TYPE_COUNTER = 3,
         VA_USER_TYPE_TABLE = 4,
-        VA_USER_TYPE_TOGGLE = 5,
-        VA_USER_TYPE_TASK = 6,
-        VA_USER_TYPE_ISR = 7
+        VA_USER_TYPE_HISTOGRAM = 5,
+        VA_USER_TYPE_TOGGLE = 6,
+        VA_USER_TYPE_TASK = 7,
+        VA_USER_TYPE_ISR = 8
     } VA_UserTraceType_t;
 
     typedef enum
