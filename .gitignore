@@ -1,0 +1,83 @@
+# Build artifacts
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.lss
+*.sym
+*.a
+*.so
+*.lib
+
+# Build directories
+build/
+Build/
+BUILD/
+debug/
+Debug/
+DEBUG/
+release/
+Release/
+RELEASE/
+out/
+output/
+dist/
+
+# CMake build artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+
+# Generated CMake files (but keep custom toolchain and project cmake files)
+cmake_install.cmake
+install_manifest.txt
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Compiler and toolchain artifacts
+*.d
+*.dep
+*.gch
+*.pch
+
+# Linker artifacts
+*.su
+
+# Debug files
+*.dSYM/
+*.dwarf
+
+# GDB files
+*.gdb
+
+# Flash/programming artifacts
+*.jlink
+*.log
+
+# STM32CubeMX generated files (optional - uncomment if you want to ignore them)
+# *.ioc
+
+# FreeRTOS trace files
+*.trace
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS generated files
+.Trash-*
+.nfs*
