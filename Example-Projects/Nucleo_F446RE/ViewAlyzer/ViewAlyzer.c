@@ -54,7 +54,7 @@ extern "C"
 #endif
 
 // --- DWT / Timestamp Globals ---
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8M_BASE__)
 #define DWT_ENABLED 1
     static volatile uint32_t g_dwt_overflow_count = 0;
 #else

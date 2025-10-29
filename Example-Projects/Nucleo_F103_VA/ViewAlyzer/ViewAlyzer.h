@@ -32,28 +32,39 @@ extern "C"
 #ifndef VA_ENABLED
 #define VA_ENABLED 1
 #endif
+
 #ifndef VA_TRACE_FREERTOS
 #define VA_TRACE_FREERTOS 1
 #endif
+
+#define ST_LINK_ITM 1u
+#define JLINK_RTT 2u
+
+#define VA_TRANSPORT ST_LINK_ITM // Select active transport backend
+#define LOG_PENDSV 0             // Experimental, unused
+
+#define VA_ITM_PORT 1    // ITM stimulus port when using ST-LINK transport
+#define VA_RTT_CHANNEL 0 // RTT channel when using J-LINK RTT transport
+
+#if (VA_TRANSPORT == JLINK_RTT)
+#define VA_RTT_BUFFER_SIZE 4096u                       // Bytes reserved for RTT up-buffer
+#define VA_RTT_MODE SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL // RTT buffering mode
+#endif
+
+#define VA_MAX_TASKS 32
+#define VA_MAX_TASK_NAME_LEN 16
+#define VA_ALLOWED_TO_DISABLE_INTERRUPTS 0 // Set to 1 to allow critical sections
+
+// --- Derived Configuration ---
+#define VA_TRANSPORT_IS_ST_LINK ((VA_TRANSPORT) == ST_LINK_ITM)
+#define VA_TRANSPORT_IS_JLINK ((VA_TRANSPORT) == JLINK_RTT)
+
 #if (VA_TRACE_FREERTOS == 1)
 #include "FreeRTOS.h"
 #include "task.h"
 #else
 #define TaskHandle_t uint32_t *
 #endif
-#define ST_LINK_ITM 1 // <<< SET THIS TO 1 FOR ITM, 0 FOR RTT >>>
-#define LOG_PENDSV 0
-#define VA_ITM_PORT 1    // Use ITM Stimulus Port 1 if ST_LINK_ITM = 1
-#define VA_RTT_CHANNEL 0 // Use RTT Channel 0 if ST_LINK_ITM = 0
-
-#if (ST_LINK_ITM == 0)
-#ifndef VA_RTT_BUFFER_SIZE
-#define VA_RTT_BUFFER_SIZE 4096u // Bytes reserved for RTT up-buffer when streaming ViewAlyzer frames
-#endif
-#endif
-#define VA_MAX_TASKS 32
-#define VA_MAX_TASK_NAME_LEN 16
-#define VA_ALLOWED_TO_DISABLE_INTERRUPTS 0 // Set to 1 if you can disable interrupts safely
 
 // --- Binary Event Type Codes ---
 #define VA_EVENT_TYPE_MASK 0x7F
@@ -69,7 +80,7 @@ extern "C"
 #define VA_EVENT_TASK_STACK_USAGE 0x09
 #define VA_EVENT_USER_TOGGLE 0x0A
 #define VA_EVENT_USER_FUNCTION 0x0B
-#define VA_EVENT_MUTEX_CONTENTION 0x0C  // New: tracks mutex blocking relationships
+#define VA_EVENT_MUTEX_CONTENTION 0x0C // New: tracks mutex blocking relationships
 // ... Add more event types ...
 
 // --- Setup Message Codes ---
@@ -110,11 +121,11 @@ extern "C"
 
     typedef enum
     {
-        VA_OBJECT_TYPE_QUEUE = 0,           // queueQUEUE_TYPE_BASE
-        VA_OBJECT_TYPE_MUTEX = 1,           // queueQUEUE_TYPE_MUTEX  
-        VA_OBJECT_TYPE_COUNTING_SEM = 2,    // queueQUEUE_TYPE_COUNTING_SEMAPHORE
-        VA_OBJECT_TYPE_BINARY_SEM = 3,      // queueQUEUE_TYPE_BINARY_SEMAPHORE
-        VA_OBJECT_TYPE_RECURSIVE_MUTEX = 4  // queueQUEUE_TYPE_RECURSIVE_MUTEX
+        VA_OBJECT_TYPE_QUEUE = 0,          // queueQUEUE_TYPE_BASE
+        VA_OBJECT_TYPE_MUTEX = 1,          // queueQUEUE_TYPE_MUTEX
+        VA_OBJECT_TYPE_COUNTING_SEM = 2,   // queueQUEUE_TYPE_COUNTING_SEMAPHORE
+        VA_OBJECT_TYPE_BINARY_SEM = 3,     // queueQUEUE_TYPE_BINARY_SEMAPHORE
+        VA_OBJECT_TYPE_RECURSIVE_MUTEX = 4 // queueQUEUE_TYPE_RECURSIVE_MUTEX
     } VA_QueueObjectType_t;
 
 // --- Static ISR IDs ---
@@ -147,7 +158,7 @@ extern "C"
     void VA_LogQueueObjectGive(void *queueObject, uint32_t timeout);
     void VA_LogQueueObjectTake(void *queueObject, uint32_t timeout);
     void VA_LogQueueObjectBlocking(void *queueObject);
-    
+
     // Legacy API for backward compatibility
     void VA_LogSemaphoreGive(void *semaphore);
     void VA_LogSemaphoreTake(void *semaphore, uint32_t timeout);

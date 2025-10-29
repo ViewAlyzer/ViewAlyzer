@@ -31,16 +31,13 @@ extern "C"
 #include <string.h> // For strlen, memcpy
 #include <stdio.h>  // For snprintf
 // Include RTT header only if needed
-#if ST_LINK_ITM == 0
+#if VA_TRANSPORT_IS_JLINK
 #include "SEGGER_RTT.h"
-#ifndef VA_RTT_BUFFER_SIZE
-#define VA_RTT_BUFFER_SIZE 4096u
-#endif
 #ifndef VA_RTT_MODE
 #define VA_RTT_MODE SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL
 #endif
 #if VA_RTT_BUFFER_SIZE > 0
-static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
+    static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
 #endif
 #endif
 
@@ -57,7 +54,7 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
 #endif
 
 // --- DWT / Timestamp Globals ---
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8M_BASE__)
 #define DWT_ENABLED 1
     static volatile uint32_t g_dwt_overflow_count = 0;
 #else
@@ -118,7 +115,7 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
 
     // --- Low-Level Send Functions (Conditional) ---
 
-#if ST_LINK_ITM == 1
+#if VA_TRANSPORT_IS_ST_LINK
 // --- ITM Send Functions ---
 // Basic blocking wait for ITM.
 #define ITM_WaitReady(port) while (ITM->PORT[port].u32 == 0)
@@ -162,7 +159,7 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
         }
     }
 
-#else  // ST_LINK_ITM == 0
+#else  // VA_TRANSPORT_IS_ST_LINK
     // --- RTT Send Function ---
     static void _va_send_bytes(const uint8_t *data, uint32_t length)
     {
@@ -171,7 +168,7 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
         // NOTE: no CS here to avoid nested PRIMASK variables; callers are CS-wrapped.
         SEGGER_RTT_Write(VA_RTT_CHANNEL, data, length);
     }
-#endif // ST_LINK_ITM
+#endif // VA_TRANSPORT_IS_ST_LINK
 
     // --- Packet Sending Logic ---
 
@@ -601,7 +598,7 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
             VA_CS_EXIT();
             return;
         }
-        if(type== VA_USER_TYPE_ISR)
+        if (type == VA_USER_TYPE_ISR)
             _va_send_setup_packet(VA_SETUP_ISR_MAP, id, name);
         else
             _va_send_user_setup_packet(id, (uint8_t)type, name);
@@ -682,54 +679,69 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
     // Helper function to determine object type from FreeRTOS queue handle
     static VA_QueueObjectType_t _va_get_queue_object_type(void *handle)
     {
-        if (handle == NULL) return VA_OBJECT_TYPE_QUEUE;
-        
+        if (handle == NULL)
+            return VA_OBJECT_TYPE_QUEUE;
+
         // FreeRTOS queue structure has ucQueueType at offset 44 for most configurations
         // This is a bit fragile but necessary for runtime type detection
         // Alternative: could be passed as parameter if caller knows the type
-        typedef struct {
-            volatile uint8_t *pcHead;           // 0
-            volatile uint8_t *pcWriteTo;        // 4
-            union {
-                volatile uint8_t *pcReadFrom;   // 8
+        typedef struct
+        {
+            volatile uint8_t *pcHead;    // 0
+            volatile uint8_t *pcWriteTo; // 4
+            union
+            {
+                volatile uint8_t *pcReadFrom; // 8
                 volatile UBaseType_t uxRecursiveCallCount;
             } u;
-            List_t xTasksWaitingToSend;         // 12 (20 bytes)
-            List_t xTasksWaitingToReceive;      // 32 (20 bytes)
+            List_t xTasksWaitingToSend;             // 12 (20 bytes)
+            List_t xTasksWaitingToReceive;          // 32 (20 bytes)
             volatile UBaseType_t uxMessagesWaiting; // 52
-            UBaseType_t uxLength;               // 56  
-            UBaseType_t uxItemSize;             // 60
-            volatile int8_t cRxLock;            // 64
-            volatile int8_t cTxLock;            // 65
-            uint8_t ucStaticallyAllocated;      // 66
-            uint8_t ucQueueType;                // 67  <- This is what we need
+            UBaseType_t uxLength;                   // 56
+            UBaseType_t uxItemSize;                 // 60
+            volatile int8_t cRxLock;                // 64
+            volatile int8_t cTxLock;                // 65
+            uint8_t ucStaticallyAllocated;          // 66
+            uint8_t ucQueueType;                    // 67  <- This is what we need
         } QueueDefinition;
-        
+
         QueueDefinition *pxQueue = (QueueDefinition *)handle;
         return (VA_QueueObjectType_t)(pxQueue->ucQueueType);
     }
 
-    static const char* _va_get_object_type_name(VA_QueueObjectType_t type)
+    static const char *_va_get_object_type_name(VA_QueueObjectType_t type)
     {
-        switch (type) {
-            case VA_OBJECT_TYPE_QUEUE: return "Queue";
-            case VA_OBJECT_TYPE_MUTEX: return "Mutex";
-            case VA_OBJECT_TYPE_COUNTING_SEM: return "CountingSem";
-            case VA_OBJECT_TYPE_BINARY_SEM: return "BinarySem"; 
-            case VA_OBJECT_TYPE_RECURSIVE_MUTEX: return "RecursiveMutex";
-            default: return "Unknown";
+        switch (type)
+        {
+        case VA_OBJECT_TYPE_QUEUE:
+            return "Queue";
+        case VA_OBJECT_TYPE_MUTEX:
+            return "Mutex";
+        case VA_OBJECT_TYPE_COUNTING_SEM:
+            return "CountingSem";
+        case VA_OBJECT_TYPE_BINARY_SEM:
+            return "BinarySem";
+        case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
+            return "RecursiveMutex";
+        default:
+            return "Unknown";
         }
     }
 
     static uint8_t _va_get_setup_packet_type(VA_QueueObjectType_t type)
     {
-        switch (type) {
-            case VA_OBJECT_TYPE_QUEUE: return VA_SETUP_QUEUE_MAP;
-            case VA_OBJECT_TYPE_MUTEX: 
-            case VA_OBJECT_TYPE_RECURSIVE_MUTEX: return VA_SETUP_MUTEX_MAP;
-            case VA_OBJECT_TYPE_COUNTING_SEM:
-            case VA_OBJECT_TYPE_BINARY_SEM: return VA_SETUP_SEMAPHORE_MAP;
-            default: return VA_SETUP_QUEUE_MAP;
+        switch (type)
+        {
+        case VA_OBJECT_TYPE_QUEUE:
+            return VA_SETUP_QUEUE_MAP;
+        case VA_OBJECT_TYPE_MUTEX:
+        case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
+            return VA_SETUP_MUTEX_MAP;
+        case VA_OBJECT_TYPE_COUNTING_SEM:
+        case VA_OBJECT_TYPE_BINARY_SEM:
+            return VA_SETUP_SEMAPHORE_MAP;
+        default:
+            return VA_SETUP_QUEUE_MAP;
         }
     }
 
@@ -763,7 +775,7 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
     {
         if (handle == NULL)
             return 0;
-        
+
         int empty_slot = -1;
         for (int i = 0; i < VA_MAX_TASKS; ++i)
         {
@@ -781,11 +793,14 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
         queueObjectMap[empty_slot].handle = handle;
         queueObjectMap[empty_slot].id = new_id;
         queueObjectMap[empty_slot].type = type;
-        
+
         // Use provided name or generate default name based on type
-        if (name && strlen(name) > 0) {
+        if (name && strlen(name) > 0)
+        {
             strncpy(queueObjectMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
-        } else {
+        }
+        else
+        {
             strncpy(queueObjectMap[empty_slot].name, _va_get_object_type_name(type), VA_MAX_TASK_NAME_LEN - 1);
         }
         queueObjectMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
@@ -798,21 +813,21 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
     static uint8_t _va_find_semaphore_id(void *handle) { return _va_find_queue_object_id(handle); }
     static uint8_t _va_find_mutex_id(void *handle) { return _va_find_queue_object_id(handle); }
     static uint8_t _va_find_queue_id(void *handle) { return _va_find_queue_object_id(handle); }
-    
-    static uint8_t _va_assign_semaphore_id(void *handle, const char *name) 
-    { 
+
+    static uint8_t _va_assign_semaphore_id(void *handle, const char *name)
+    {
         VA_QueueObjectType_t type = _va_get_queue_object_type(handle);
-        return _va_assign_queue_object_id(handle, name, type); 
+        return _va_assign_queue_object_id(handle, name, type);
     }
-    static uint8_t _va_assign_mutex_id(void *handle, const char *name) 
-    { 
+    static uint8_t _va_assign_mutex_id(void *handle, const char *name)
+    {
         VA_QueueObjectType_t type = _va_get_queue_object_type(handle);
-        return _va_assign_queue_object_id(handle, name, type); 
+        return _va_assign_queue_object_id(handle, name, type);
     }
-    static uint8_t _va_assign_queue_id(void *handle, const char *name) 
-    { 
+    static uint8_t _va_assign_queue_id(void *handle, const char *name)
+    {
         VA_QueueObjectType_t type = _va_get_queue_object_type(handle);
-        return _va_assign_queue_object_id(handle, name, type); 
+        return _va_assign_queue_object_id(handle, name, type);
     }
 #endif
 
@@ -866,10 +881,11 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
     void VA_UpdateQueueObjectType(void *queueObject, const char *typeHint)
     {
 #if (VA_TRACE_FREERTOS == 1)
-        if (queueObject == NULL) return;
-        
+        if (queueObject == NULL)
+            return;
+
         VA_CS_ENTER();
-        
+
         // Find the existing entry (should have been created by traceQUEUE_CREATE)
         int idx = -1;
         for (int i = 0; i < VA_MAX_TASKS; ++i)
@@ -880,86 +896,49 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
                 break;
             }
         }
-        
+
         if (idx >= 0)
         {
             // Determine the type from typeHint string (since FreeRTOS doesn't distinguish
             // between queues and mutexes in ucQueueType field)
-            VA_QueueObjectType_t type = VA_OBJECT_TYPE_QUEUE;  // default
-            
-            if (typeHint != NULL) {
-                if (strstr(typeHint, "RecMutex") != NULL || strstr(typeHint, "RecursiveMutex") != NULL) {
+            VA_QueueObjectType_t type = VA_OBJECT_TYPE_QUEUE; // default
+
+            if (typeHint != NULL)
+            {
+                if (strstr(typeHint, "RecMutex") != NULL || strstr(typeHint, "RecursiveMutex") != NULL)
+                {
                     type = VA_OBJECT_TYPE_RECURSIVE_MUTEX;
-                } else if (strstr(typeHint, "Mutex") != NULL) {
+                }
+                else if (strstr(typeHint, "Mutex") != NULL)
+                {
                     type = VA_OBJECT_TYPE_MUTEX;
-                } else if (strstr(typeHint, "CountSem") != NULL || strstr(typeHint, "CountingSem") != NULL) {
+                }
+                else if (strstr(typeHint, "CountSem") != NULL || strstr(typeHint, "CountingSem") != NULL)
+                {
                     type = VA_OBJECT_TYPE_COUNTING_SEM;
-                } else if (strstr(typeHint, "BinSem") != NULL || strstr(typeHint, "BinarySem") != NULL) {
+                }
+                else if (strstr(typeHint, "BinSem") != NULL || strstr(typeHint, "BinarySem") != NULL)
+                {
                     type = VA_OBJECT_TYPE_BINARY_SEM;
                 }
                 // else remains VA_OBJECT_TYPE_QUEUE
             }
-            
+
             // Update the stored type
             queueObjectMap[idx].type = type;
-            
+
             // Generate a more descriptive name based on type hint and detected type
             char descriptiveName[VA_MAX_TASK_NAME_LEN];
-            const char* finalName = typeHint;
-            
-            if (typeHint != NULL && strlen(typeHint) > 0) {
-                // Combine type hint with detected type for better identification
-                switch (type) {
-                    case VA_OBJECT_TYPE_MUTEX:
-                        if (strstr(typeHint, "Mutex") == NULL) {
-                            snprintf(descriptiveName, sizeof(descriptiveName), "%s_Mutex", typeHint);
-                            finalName = descriptiveName;
-                        }
-                        break;
-                    case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-                        snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
-                        finalName = descriptiveName;
-                        break;
-                    default:
-                        break;
-                }
-            }
-            
-            // Update the name
-            strncpy(queueObjectMap[idx].name, finalName, VA_MAX_TASK_NAME_LEN - 1);
-            queueObjectMap[idx].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
-            
-            // Re-send setup packet with correct type
-            _va_send_setup_packet(_va_get_setup_packet_type(type), queueObjectMap[idx].id, queueObjectMap[idx].name);
-        }
-        
-        VA_CS_EXIT();
-#endif
-    }
+            const char *finalName = typeHint;
 
-    void VA_LogQueueObjectCreateWithType(void *queueObject, const char *typeHint)
-    {
-#if (VA_TRACE_FREERTOS == 1)
-        if (queueObject == NULL) return;
-        
-        VA_CS_ENTER();
-        VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
-        
-        // Generate a more descriptive name based on type hint and detected type
-        char descriptiveName[VA_MAX_TASK_NAME_LEN];
-        const char* finalName = typeHint;
-        
-        if (typeHint != NULL && strlen(typeHint) > 0) {
-            // Combine type hint with detected type for better identification
-            switch (type) {
-                case VA_OBJECT_TYPE_QUEUE:
-                    if (strstr(typeHint, "Queue") == NULL) {
-                        snprintf(descriptiveName, sizeof(descriptiveName), "%s_Queue", typeHint);
-                        finalName = descriptiveName;
-                    }
-                    break;
+            if (typeHint != NULL && strlen(typeHint) > 0)
+            {
+                // Combine type hint with detected type for better identification
+                switch (type)
+                {
                 case VA_OBJECT_TYPE_MUTEX:
-                    if (strstr(typeHint, "Mutex") == NULL) {
+                    if (strstr(typeHint, "Mutex") == NULL)
+                    {
                         snprintf(descriptiveName, sizeof(descriptiveName), "%s_Mutex", typeHint);
                         finalName = descriptiveName;
                     }
@@ -968,19 +947,72 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
                     snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
                     finalName = descriptiveName;
                     break;
-                case VA_OBJECT_TYPE_COUNTING_SEM:
-                    snprintf(descriptiveName, sizeof(descriptiveName), "%s_CountSem", typeHint);
-                    finalName = descriptiveName;
-                    break;
-                case VA_OBJECT_TYPE_BINARY_SEM:
-                    snprintf(descriptiveName, sizeof(descriptiveName), "%s_BinSem", typeHint);
-                    finalName = descriptiveName;
-                    break;
                 default:
                     break;
+                }
+            }
+
+            // Update the name
+            strncpy(queueObjectMap[idx].name, finalName, VA_MAX_TASK_NAME_LEN - 1);
+            queueObjectMap[idx].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
+
+            // Re-send setup packet with correct type
+            _va_send_setup_packet(_va_get_setup_packet_type(type), queueObjectMap[idx].id, queueObjectMap[idx].name);
+        }
+
+        VA_CS_EXIT();
+#endif
+    }
+
+    void VA_LogQueueObjectCreateWithType(void *queueObject, const char *typeHint)
+    {
+#if (VA_TRACE_FREERTOS == 1)
+        if (queueObject == NULL)
+            return;
+
+        VA_CS_ENTER();
+        VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
+
+        // Generate a more descriptive name based on type hint and detected type
+        char descriptiveName[VA_MAX_TASK_NAME_LEN];
+        const char *finalName = typeHint;
+
+        if (typeHint != NULL && strlen(typeHint) > 0)
+        {
+            // Combine type hint with detected type for better identification
+            switch (type)
+            {
+            case VA_OBJECT_TYPE_QUEUE:
+                if (strstr(typeHint, "Queue") == NULL)
+                {
+                    snprintf(descriptiveName, sizeof(descriptiveName), "%s_Queue", typeHint);
+                    finalName = descriptiveName;
+                }
+                break;
+            case VA_OBJECT_TYPE_MUTEX:
+                if (strstr(typeHint, "Mutex") == NULL)
+                {
+                    snprintf(descriptiveName, sizeof(descriptiveName), "%s_Mutex", typeHint);
+                    finalName = descriptiveName;
+                }
+                break;
+            case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
+                snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
+                finalName = descriptiveName;
+                break;
+            case VA_OBJECT_TYPE_COUNTING_SEM:
+                snprintf(descriptiveName, sizeof(descriptiveName), "%s_CountSem", typeHint);
+                finalName = descriptiveName;
+                break;
+            case VA_OBJECT_TYPE_BINARY_SEM:
+                snprintf(descriptiveName, sizeof(descriptiveName), "%s_BinSem", typeHint);
+                finalName = descriptiveName;
+                break;
+            default:
+                break;
             }
         }
-        
+
         _va_assign_queue_object_id(queueObject, finalName, type);
         VA_CS_EXIT();
 #endif
@@ -989,8 +1021,9 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
     void VA_LogQueueObjectGive(void *queueObject, uint32_t timeout)
     {
 #if (VA_TRACE_FREERTOS == 1)
-        if (queueObject == NULL) return;
-        
+        if (queueObject == NULL)
+            return;
+
         VA_CS_ENTER();
         uint8_t id = _va_find_queue_object_id(queueObject);
         if (id == 0)
@@ -998,26 +1031,27 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
             VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
             id = _va_assign_queue_object_id(queueObject, NULL, type);
         }
-        
+
         // Determine the appropriate event type based on object type
         // Use the stored type from the map (which may have been updated by VA_UpdateQueueObjectType)
         uint8_t event_type;
         VA_QueueObjectType_t type = _va_get_stored_queue_object_type(queueObject);
-        switch (type) {
-            case VA_OBJECT_TYPE_MUTEX:
-            case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-                event_type = VA_EVENT_MUTEX;
-                break;
-            case VA_OBJECT_TYPE_COUNTING_SEM:
-            case VA_OBJECT_TYPE_BINARY_SEM:
-                event_type = VA_EVENT_SEMAPHORE;
-                break;
-            case VA_OBJECT_TYPE_QUEUE:
-            default:
-                event_type = VA_EVENT_QUEUE;
-                break;
+        switch (type)
+        {
+        case VA_OBJECT_TYPE_MUTEX:
+        case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
+            event_type = VA_EVENT_MUTEX;
+            break;
+        case VA_OBJECT_TYPE_COUNTING_SEM:
+        case VA_OBJECT_TYPE_BINARY_SEM:
+            event_type = VA_EVENT_SEMAPHORE;
+            break;
+        case VA_OBJECT_TYPE_QUEUE:
+        default:
+            event_type = VA_EVENT_QUEUE;
+            break;
         }
-        
+
         _va_send_event_packet(VA_EVENT_FLAG_START_END | event_type, id, _va_get_timestamp());
         VA_CS_EXIT();
 #endif
@@ -1026,8 +1060,9 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
     void VA_LogQueueObjectTake(void *queueObject, uint32_t timeout)
     {
 #if (VA_TRACE_FREERTOS == 1)
-        if (queueObject == NULL) return;
-        
+        if (queueObject == NULL)
+            return;
+
         VA_CS_ENTER();
         (void)timeout;
         uint8_t id = _va_find_queue_object_id(queueObject);
@@ -1036,29 +1071,30 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
             VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
             id = _va_assign_queue_object_id(queueObject, NULL, type);
         }
-        
+
         // Determine the appropriate event type based on object type
         // Use the stored type from the map (which may have been updated by VA_UpdateQueueObjectType)
         uint8_t event_type;
         VA_QueueObjectType_t type = _va_get_stored_queue_object_type(queueObject);
-        
-        switch (type) {
-            case VA_OBJECT_TYPE_MUTEX:
-            case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-                event_type = VA_EVENT_MUTEX;
-                // Note: Contention detection is now handled in VA_LogQueueObjectBlocking()
-                // which is called via traceBLOCKING_ON_QUEUE_RECEIVE before the task blocks
-                break;
-            case VA_OBJECT_TYPE_COUNTING_SEM:
-            case VA_OBJECT_TYPE_BINARY_SEM:
-                event_type = VA_EVENT_SEMAPHORE;
-                break;
-            case VA_OBJECT_TYPE_QUEUE:
-            default:
-                event_type = VA_EVENT_QUEUE;
-                break;
+
+        switch (type)
+        {
+        case VA_OBJECT_TYPE_MUTEX:
+        case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
+            event_type = VA_EVENT_MUTEX;
+            // Note: Contention detection is now handled in VA_LogQueueObjectBlocking()
+            // which is called via traceBLOCKING_ON_QUEUE_RECEIVE before the task blocks
+            break;
+        case VA_OBJECT_TYPE_COUNTING_SEM:
+        case VA_OBJECT_TYPE_BINARY_SEM:
+            event_type = VA_EVENT_SEMAPHORE;
+            break;
+        case VA_OBJECT_TYPE_QUEUE:
+        default:
+            event_type = VA_EVENT_QUEUE;
+            break;
         }
-        
+
         _va_send_event_packet(event_type, id, _va_get_timestamp());
         VA_CS_EXIT();
 #endif
@@ -1067,45 +1103,46 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
     void VA_LogQueueObjectBlocking(void *queueObject)
     {
 #if (VA_TRACE_FREERTOS == 1)
-        if (queueObject == NULL) return;
-        
+        if (queueObject == NULL)
+            return;
+
         VA_CS_ENTER();
-        
+
         uint8_t id = _va_find_queue_object_id(queueObject);
         if (id == 0)
         {
             VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
             id = _va_assign_queue_object_id(queueObject, NULL, type);
         }
-        
+
         // Get the stored type (which may have been updated by VA_UpdateQueueObjectType)
         VA_QueueObjectType_t type = _va_get_stored_queue_object_type(queueObject);
-        
+
         // Only check for contention on mutexes
         if (type == VA_OBJECT_TYPE_MUTEX || type == VA_OBJECT_TYPE_RECURSIVE_MUTEX)
         {
-            // Check if there's contention (another task holds it)
-            #if (INCLUDE_xQueueGetMutexHolder == 1)
+// Check if there's contention (another task holds it)
+#if (INCLUDE_xQueueGetMutexHolder == 1)
             {
                 TaskHandle_t holder = xQueueGetMutexHolder((QueueHandle_t)queueObject);
-                if (holder != NULL) 
+                if (holder != NULL)
                 {
                     // Mutex is currently held by another task - log contention
                     TaskHandle_t current = xTaskGetCurrentTaskHandle();
-                    if (holder != current) 
+                    if (holder != current)
                     {
                         uint8_t holder_id = _va_find_task_id(holder);
                         uint8_t waiter_id = _va_find_task_id(current);
-                        if (holder_id != 0 && waiter_id != 0) 
+                        if (holder_id != 0 && waiter_id != 0)
                         {
                             _va_send_mutex_contention_packet(id, waiter_id, holder_id, _va_get_timestamp());
                         }
                     }
                 }
             }
-            #endif
+#endif
         }
-        
+
         VA_CS_EXIT();
 #endif
     }
@@ -1209,17 +1246,17 @@ static uint8_t s_va_rtt_up_buffer[VA_RTT_BUFFER_SIZE];
 
         _va_enable_dwt_counter();
 
-#if ST_LINK_ITM == 1
+#if VA_TRANSPORT_IS_ST_LINK
         ITM->LAR = 0xC5ACCE55;
         ITM->TCR |= ITM_TCR_ITMENA_Msk;
         ITM->TER |= (1UL << VA_ITM_PORT);
 #else
         SEGGER_RTT_Init();
 #if VA_RTT_BUFFER_SIZE > 0
-    // Default to a dedicated buffer so RTT payloads survive host connect latency.
-    SEGGER_RTT_ConfigUpBuffer(VA_RTT_CHANNEL, "ViewAlyzer", s_va_rtt_up_buffer, sizeof(s_va_rtt_up_buffer), VA_RTT_MODE);
+        // Default to a dedicated buffer so RTT payloads survive host connect latency.
+        SEGGER_RTT_ConfigUpBuffer(VA_RTT_CHANNEL, "ViewAlyzer", s_va_rtt_up_buffer, sizeof(s_va_rtt_up_buffer), VA_RTT_MODE);
 #else
-    SEGGER_RTT_ConfigUpBuffer(VA_RTT_CHANNEL, "ViewAlyzer", NULL, 0, VA_RTT_MODE);
+        SEGGER_RTT_ConfigUpBuffer(VA_RTT_CHANNEL, "ViewAlyzer", NULL, 0, VA_RTT_MODE);
 #endif
 #endif
         VA_IS_INIT = true;
