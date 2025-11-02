@@ -28,32 +28,54 @@ extern "C"
 {
 #endif
 
-// --- Configuration ---
+/**************************************************************
+                     USER CONFIGURATION
+**************************************************************/
 #ifndef VA_ENABLED
-#define VA_ENABLED 1
+#define VA_ENABLED 1         // Can be defined in your build system to 0 to disable ViewAlyzer
 #endif
 
 #ifndef VA_TRACE_FREERTOS
-#define VA_TRACE_FREERTOS 1
+#define VA_TRACE_FREERTOS 1  // Can be defined in your build system to 0 to disable FreeRTOS tracing
 #endif
 
 #define ST_LINK_ITM 1u
-#define JLINK_RTT 2u
+#define JLINK_RTT   2u
 
-#define VA_TRANSPORT ST_LINK_ITM // Select active transport backend
+#define VA_TRANSPORT ST_LINK_ITM  // Select active transport backend
 #define LOG_PENDSV 0             // Experimental, unused
 
-#define VA_ITM_PORT 1    // ITM stimulus port when using ST-LINK transport
-#define VA_RTT_CHANNEL 0 // RTT channel when using J-LINK RTT transport
+#define VA_ITM_PORT    1         // ITM stimulus port where logs are sent when using ST-LINK transport
+#define VA_RTT_CHANNEL 0        // RTT channel when using J-LINK RTT transport
 
-#if (VA_TRANSPORT == JLINK_RTT)
-#define VA_RTT_BUFFER_SIZE 4096u                       // Bytes reserved for RTT up-buffer
-#define VA_RTT_MODE SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL // RTT buffering mode
-#endif
-
-#define VA_MAX_TASKS 32
+#define VA_MAX_TASKS         32
 #define VA_MAX_TASK_NAME_LEN 16
 #define VA_ALLOWED_TO_DISABLE_INTERRUPTS 1 // Set to 1 to allow critical sections
+
+// If using J-LINK RTT transport, configure RTT here by setting VA_CONFIGURE_RTT to 1
+// otherwise set to 0 to skip RTT configuration and user is expected to do it elsewhere
+#define VA_CONFIGURE_RTT       1                        //set to 0 to use your own init
+#define VA_RTT_BUFFER_SIZE 4096u                       // Bytes reserved for RTT up-buffer
+#define VA_RTT_MODE SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL // RTT buffering mode
+
+// Convenience Macros for User Function Timing
+#if (VA_ENABLED == 1)
+#define VA_FUNCTION_ENTRY(id) VA_LogUserEvent(id, USER_EVENT_IN)
+#define VA_FUNCTION_EXIT(id) VA_LogUserEvent(id, USER_EVENT_OUT)
+#else
+#define VA_FUNCTION_ENTRY(id) ((void)0)
+#define VA_FUNCTION_EXIT(id) ((void)0)
+#endif
+#endif // VA_ENABLED
+
+/**************************************************************
+                        END USER CONFIGURATION
+**************************************************************/
+
+
+/**************************************************************
+                     DO NOT EDIT BELOW THIS LINE
+**************************************************************/
 
 // --- Derived Configuration ---
 #define VA_TRANSPORT_IS_ST_LINK ((VA_TRANSPORT) == ST_LINK_ITM)
@@ -67,44 +89,44 @@ extern "C"
 #endif
 
 // --- Binary Event Type Codes ---
-#define VA_EVENT_TYPE_MASK 0x7F
-#define VA_EVENT_FLAG_START_END 0x80
-#define VA_EVENT_TASK_SWITCH 0x01
-#define VA_EVENT_ISR 0x02
-#define VA_EVENT_TASK_CREATE 0x03
-#define VA_EVENT_USER_TRACE 0x04
-#define VA_EVENT_TASK_NOTIFY 0x05
-#define VA_EVENT_SEMAPHORE 0x06
-#define VA_EVENT_MUTEX 0x07
-#define VA_EVENT_QUEUE 0x08
+#define VA_EVENT_TYPE_MASK        0x7F
+#define VA_EVENT_FLAG_START_END   0x80
+#define VA_EVENT_TASK_SWITCH      0x01
+#define VA_EVENT_ISR              0x02
+#define VA_EVENT_TASK_CREATE      0x03
+#define VA_EVENT_USER_TRACE       0x04
+#define VA_EVENT_TASK_NOTIFY      0x05
+#define VA_EVENT_SEMAPHORE        0x06
+#define VA_EVENT_MUTEX            0x07
+#define VA_EVENT_QUEUE            0x08
 #define VA_EVENT_TASK_STACK_USAGE 0x09
-#define VA_EVENT_USER_TOGGLE 0x0A
-#define VA_EVENT_USER_FUNCTION 0x0B
-#define VA_EVENT_MUTEX_CONTENTION 0x0C // New: tracks mutex blocking relationships
-// ... Add more event types ...
+#define VA_EVENT_USER_TOGGLE      0x0A
+#define VA_EVENT_USER_FUNCTION    0x0B
+#define VA_EVENT_MUTEX_CONTENTION 0x0C
+
 
 // --- Setup Message Codes ---
-#define VA_SETUP_TASK_MAP 0x70
-#define VA_SETUP_ISR_MAP 0x71
-#define VA_SETUP_INFO 0x7F
-#define VA_SETUP_USER_TRACE 0x72
-#define VA_SETUP_SEMAPHORE_MAP 0x73
-#define VA_SETUP_MUTEX_MAP 0x74
-#define VA_SETUP_QUEUE_MAP 0x75
+#define VA_SETUP_TASK_MAP          0x70
+#define VA_SETUP_ISR_MAP           0x71
+#define VA_SETUP_INFO              0x7F
+#define VA_SETUP_USER_TRACE        0x72
+#define VA_SETUP_SEMAPHORE_MAP     0x73
+#define VA_SETUP_MUTEX_MAP         0x74
+#define VA_SETUP_QUEUE_MAP         0x75
 #define VA_SETUP_USER_FUNCTION_MAP 0x76
-#define VA_SETUP_CONFIG_FLAGS 0x77
+#define VA_SETUP_CONFIG_FLAGS      0x77
 
     typedef enum
     {
-        VA_USER_TYPE_GRAPH = 0,
-        VA_USER_TYPE_BAR = 1,
-        VA_USER_TYPE_GAUGE = 2,
-        VA_USER_TYPE_COUNTER = 3,
-        VA_USER_TYPE_TABLE = 4,
+        VA_USER_TYPE_GRAPH     = 0,
+        VA_USER_TYPE_BAR       = 1,
+        VA_USER_TYPE_GAUGE     = 2,
+        VA_USER_TYPE_COUNTER   = 3,
+        VA_USER_TYPE_TABLE     = 4,
         VA_USER_TYPE_HISTOGRAM = 5,
-        VA_USER_TYPE_TOGGLE = 6,
-        VA_USER_TYPE_TASK = 7,
-        VA_USER_TYPE_ISR = 8
+        VA_USER_TYPE_TOGGLE    = 6,
+        VA_USER_TYPE_TASK      = 7,
+        VA_USER_TYPE_ISR       = 8
     } VA_UserTraceType_t;
 
     typedef enum
@@ -115,17 +137,17 @@ extern "C"
 
     typedef enum
     {
-        USER_EVENT_START, // Function entry/start
-        USER_EVENT_END    // Function exit/end
+        USER_EVENT_START,
+        USER_EVENT_END
     } VA_UserEventState_t;
 
     typedef enum
     {
-        VA_OBJECT_TYPE_QUEUE = 0,          // queueQUEUE_TYPE_BASE
-        VA_OBJECT_TYPE_MUTEX = 1,          // queueQUEUE_TYPE_MUTEX
-        VA_OBJECT_TYPE_COUNTING_SEM = 2,   // queueQUEUE_TYPE_COUNTING_SEMAPHORE
-        VA_OBJECT_TYPE_BINARY_SEM = 3,     // queueQUEUE_TYPE_BINARY_SEMAPHORE
-        VA_OBJECT_TYPE_RECURSIVE_MUTEX = 4 // queueQUEUE_TYPE_RECURSIVE_MUTEX
+        VA_OBJECT_TYPE_QUEUE           = 0,
+        VA_OBJECT_TYPE_MUTEX           = 1,
+        VA_OBJECT_TYPE_COUNTING_SEM    = 2,
+        VA_OBJECT_TYPE_BINARY_SEM      = 3,
+        VA_OBJECT_TYPE_RECURSIVE_MUTEX = 4
     } VA_QueueObjectType_t;
 
 // --- Static ISR IDs ---
@@ -135,95 +157,59 @@ extern "C"
 
 // --- Public Functions ---
 #if (VA_ENABLED == 1)
+    // user API
     void VA_Init(uint32_t cpu_freq);
+    void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type);
+    void VA_RegisterUserFunction(uint8_t id, const char *name);
     void VA_LogISRStart(uint8_t isrId);
     void VA_LogISREnd(uint8_t isrId);
-    void VA_TaskSwitchedIn(void);
-    void VA_TaskSwitchedOut(void);
-    void VA_TaskCreated(TaskHandle_t pxCreatedTask);
-    void VA_TrackDWTOverflow(void);
-    void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type);
-    void VA_LogUserTrace(uint8_t id, int32_t value);
-    void VA_LogUserToggleEvent(uint8_t id, bool state);
-    void VA_RegisterUserFunction(uint8_t id, const char *name);
+    void VA_LogTrace(uint8_t id, int32_t value);
+    void VA_LogToggle(uint8_t id, bool state);
     void VA_LogUserEvent(uint8_t id, bool state);
-    bool VA_IsInit(void);
-    // TODO:  new user event here
-    void VA_LogTaskNotifyGive(TaskHandle_t destTask, uint32_t value);
-    void VA_LogTaskNotifyTake(uint32_t value);
-    // Unified object tracking API
-    void VA_LogQueueObjectCreate(void *queueObject, const char *name);
-    void VA_LogQueueObjectCreateWithType(void *queueObject, const char *typeHint);
-    void VA_UpdateQueueObjectType(void *queueObject, const char *typeHint);
-    void VA_LogQueueObjectGive(void *queueObject, uint32_t timeout);
-    void VA_LogQueueObjectTake(void *queueObject, uint32_t timeout);
-    void VA_LogQueueObjectBlocking(void *queueObject);
 
-    // Legacy API for backward compatibility
-    void VA_LogSemaphoreGive(void *semaphore);
-    void VA_LogSemaphoreTake(void *semaphore, uint32_t timeout);
-    void VA_LogSemaphoreCreate(void *semaphore, const char *name);
-    void VA_LogMutexAcquire(void *mutex, uint32_t timeout);
-    void VA_LogMutexRelease(void *mutex);
-    void VA_LogMutexCreate(void *mutex, const char *name);
-    void VA_LogQueueSend(void *queue, uint32_t timeout);
-    void VA_LogQueueReceive(void *queue, uint32_t timeout);
-    void VA_LogQueueCreate(void *queue, const char *name);
+    // internal FreeRTOS hooks
+    void va_taskswitchedin(void);
+    void va_taskswitchedout(void);
+    void va_taskcreated(TaskHandle_t pxCreatedTask);
+    bool va_isnit(void);
+    
+    void va_logtasknotifygive(TaskHandle_t destTask, uint32_t value);
+    void va_logtasknotifytake(uint32_t value);
+    // Unified object tracking API
+    void va_logQueueObjectCreate(void *queueObject, const char *name);
+    void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint);
+    void va_updateQueueObjectType(void *queueObject, const char *typeHint);
+    void va_logQueueObjectGive(void *queueObject, uint32_t timeout);
+    void va_logQueueObjectTake(void *queueObject, uint32_t timeout);
+    void va_logQueueObjectBlocking(void *queueObject);
+
     extern volatile uint32_t notificationValue;
 
 #else
 // --- Empty stubs ---
 #define VA_Init(cpu_freq) ((void)0)
+#define VA_RegisterUserTrace(id, name, type) ((void)0)
+#define VA_RegisterUserFunction(id, name) ((void)0)
 #define VA_LogISRStart(isrId) ((void)0)
 #define VA_LogISREnd(isrId) ((void)0)
-#define VA_TaskSwitchedIn() ((void)0)
-#define VA_TaskSwitchedOut() ((void)0)
-#define VA_TaskCreated(pxCreatedTask) ((void)0)
-#define VA_TrackDWTOverflow() ((void)0)
-#define VA_RegisterUserTrace(id, name, type) ((void)0)
-#define VA_LogUserTrace(id, value) ((void)0)
-#define VA_LogUserToggleEvent(id, state) ((void)0)
-#define VA_RegisterUserFunction(id, name) ((void)0)
+#define VA_LogTrace(id, value) ((void)0)
+#define VA_LogToggle(id, state) ((void)0)
 #define VA_LogUserEvent(id, state) ((void)0)
-#define VA_LogTaskNotifyGive(destTask, value) ((void)0)
-#define VA_LogTaskNotifyTake(value) ((void)0)
-#define VA_LogQueueObjectCreate(queueObject, name) ((void)0)
-#define VA_LogQueueObjectCreateWithType(queueObject, typeHint) ((void)0)
-#define VA_UpdateQueueObjectType(queueObject, typeHint) ((void)0)
-#define VA_LogQueueObjectGive(queueObject, timeout) ((void)0)
-#define VA_LogQueueObjectTake(queueObject, timeout) ((void)0)
-#define VA_LogSemaphoreGive(semaphore) ((void)0)
-#define VA_LogSemaphoreTake(semaphore, timeout) ((void)0)
-#define VA_LogSemaphoreCreate(semaphore, name) ((void)0)
-#define VA_LogMutexAcquire(mutex, timeout) ((void)0)
-#define VA_LogMutexRelease(mutex) ((void)0)
-#define VA_LogMutexCreate(mutex, name) ((void)0)
-#define VA_LogQueueSend(queue, timeout) ((void)0)
-#define VA_LogQueueReceive(queue, timeout) ((void)0)
-#define VA_LogQueueCreate(queue, name) ((void)0)
-bool VA_IsInit(void);
+
+#define va_taskswitchedin() ((void)0)
+#define va_taskswitchedout() ((void)0)
+#define va_taskcreated(pxCreatedTask) ((void)0)
+#define va_logtasknotifygive(destTask, value) ((void)0)
+#define va_logtasknotifytake(value) ((void)0)
+#define va_logQueueObjectCreate(queueObject, name) ((void)0)
+#define va_logQueueObjectCreateWithType(queueObject, typeHint) ((void)0)
+#define va_updateQueueObjectType(queueObject, typeHint) ((void)0)
+#define va_logQueueObjectGive(queueObject, timeout) ((void)0)
+#define va_logQueueObjectTake(queueObject, timeout) ((void)0)
+
+bool va_isnit(void);
 
 extern volatile uint32_t notificationValue;
-
-// --- Convenience Macros for User Function Timing ---
-#if (VA_ENABLED == 1)
-#define VA_FUNCTION_ENTRY(id) VA_LogUserEvent(id, USER_EVENT_IN)
-#define VA_FUNCTION_EXIT(id) VA_LogUserEvent(id, USER_EVENT_OUT)
-#else
-#define VA_FUNCTION_ENTRY(id) ((void)0)
-#define VA_FUNCTION_EXIT(id) ((void)0)
-#endif
-#endif // VA_ENABLED
-
-    // Ensure FreeRTOSConfig.h uses these via trace macros
-    /* Example:
-     extern void VA_TaskSwitchedIn( void );
-     extern void VA_TaskSwitchedOut( void );
-     extern void VA_TaskCreated( TaskHandle_t pxNewTCB );
-     #define traceTASK_SWITCHED_IN()         VA_TaskSwitchedIn()
-     #define traceTASK_SWITCHED_OUT()        VA_TaskSwitchedOut()
-     #define traceTASK_CREATE( pxNewTCB )    VA_TaskCreated( pxNewTCB )
-    */
 
 #ifdef __cplusplus
 }

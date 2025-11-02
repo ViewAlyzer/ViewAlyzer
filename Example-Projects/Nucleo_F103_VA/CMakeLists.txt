@@ -45,16 +45,19 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
+# Shared ViewAlyzer recorder location
+set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../ViewAlyzerRecorder")
+
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    ViewAlyzer/ViewAlyzer.c
+    ${VIEWALYZER_RECORDER_DIR}/ViewAlyzer.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-    ViewAlyzer/
+    ${VIEWALYZER_RECORDER_DIR}
 )
 
 # Add project symbols (macros)

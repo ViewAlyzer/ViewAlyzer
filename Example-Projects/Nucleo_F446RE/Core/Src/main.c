@@ -142,8 +142,23 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   SWO_Init(180000000, 2000000, VA_ITM_PORT); // CPU 180MHz, SWO 2MHz, port 0
-  HAL_Delay(3000);
+  HAL_Delay(1000);
   VA_Init(SystemCoreClock);
+  VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_HISTOGRAM);      // Task02: Sine value from sensor
+  VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);       // Task05: HAL tick counter
+  VA_RegisterUserTrace(44, "Task08 Toggle", VA_USER_TYPE_TOGGLE);     // Task08: Function entry/exit toggle
+  VA_RegisterUserFunction(45, "Custom Function");                     // Task08: Function timing
+  VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_HISTOGRAM); // Task03: Processed sensor values
+  VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_COUNTER);   // Task05: Mutex-protected shared counter
+  VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);       // Task07: Mutex-protected operation result
+  VA_RegisterUserTrace(49, "Local Counter", VA_USER_TYPE_GRAPH);      // Task08: Local copy of shared counter
+  VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_BAR);     // WorkloadManager: Current profile index
+
+  // Contention test task traces
+  VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_COUNTER); // ContentionLow: How many times accessed mutex
+  VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_COUNTER); // ContentionMed: How many times accessed mutex (-1 = timeout)
+  VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_GRAPH);    // ContentionHigh: Wait time in ticks to get mutex
+
   /* USER CODE END 2 */
 
   /* Init scheduler */

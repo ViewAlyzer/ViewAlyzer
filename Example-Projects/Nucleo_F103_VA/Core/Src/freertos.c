@@ -323,7 +323,7 @@ void StartTask02(void *argument)
   {
     // Generate sensor data and send to queue
     sineVal = get_next_sine_value(); // Get next sine value
-    VA_LogUserTrace(42, sineVal);    // Log the sine value trace
+    VA_LogTrace(42, sineVal);    // Log the sine value trace
     
     // Create sensor data structure
     SensorData_t sensorData = {
@@ -386,7 +386,7 @@ void StartTask03(void *argument)
         }
         
         // Log processed data
-        VA_LogUserTrace(46, receivedData.sensorValue);
+        VA_LogTrace(46, receivedData.sensorValue);
       }
     }
     
@@ -486,7 +486,7 @@ void StartTask05(void *argument)
       sharedAccumulator += sum;
       
       // Log the shared counter value
-      VA_LogUserTrace(47, sharedCounter);
+      VA_LogTrace(47, sharedCounter);
       
       xSemaphoreGive(sharedResourceMutex);
     }
@@ -500,7 +500,7 @@ void StartTask05(void *argument)
     }
 
     // Log the amount of stack used for debugging
-    VA_LogUserTrace(43, HAL_GetTick()); // Log tick counter
+    VA_LogTrace(43, HAL_GetTick()); // Log tick counter
 
     vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
   }
@@ -573,7 +573,7 @@ void StartTask07(void *argument)
       // Safe to use printf or other print functions here
       // In this case, we'll just do some computation to simulate protected operation
       volatile uint32_t protected_operation = HAL_GetTick() * 2;
-      VA_LogUserTrace(48, protected_operation); // Log protected operation result
+      VA_LogTrace(48, protected_operation); // Log protected operation result
       
       xSemaphoreGive(printMutex);
     }
@@ -607,7 +607,7 @@ void StartTask08(void *argument)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     
     // Log function entry
-    VA_LogUserToggleEvent(44, TOGGLE_HIGH);
+    VA_LogToggle(44, TOGGLE_HIGH);
     VA_LogUserEvent(45, USER_EVENT_START);
     
     // Get inverted sine value
@@ -621,7 +621,7 @@ void StartTask08(void *argument)
       volatile float localAccumulator = sharedAccumulator;
       
       // Log the shared values
-      VA_LogUserTrace(49, localCounter);
+      VA_LogTrace(49, localCounter);
       
       xSemaphoreGive(sharedResourceMutex);
     }
@@ -641,7 +641,7 @@ void StartTask08(void *argument)
     }
 
     // Log function exit
-    VA_LogUserToggleEvent(44, TOGGLE_LOW);
+    VA_LogToggle(44, TOGGLE_LOW);
     VA_LogUserEvent(45, USER_EVENT_END);
     
     vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
@@ -678,7 +678,7 @@ void WorkloadManagerTask(void *argument)
             task_workloads[i] = workload_profiles[current_profile][i];
           }
           
-          VA_LogUserTrace(50, current_profile); // Log the current profile index
+          VA_LogTrace(50, current_profile); // Log the current profile index
           lastProfileChange = xTaskGetTickCount();
         }
       }
@@ -695,7 +695,7 @@ void WorkloadManagerTask(void *argument)
         task_workloads[i] = workload_profiles[current_profile][i];
       }
       
-      VA_LogUserTrace(50, current_profile); // Log the current profile index
+      VA_LogTrace(50, current_profile); // Log the current profile index
       lastProfileChange = xTaskGetTickCount();
     }
     
@@ -731,7 +731,7 @@ void ContentionLowPrioTask(void *argument)
       contentionCounter++;
       
       // Log that low priority task has the mutex
-      VA_LogUserTrace(51, (int32_t)lowPrioAccess);
+      VA_LogTrace(51, (int32_t)lowPrioAccess);
       
       // Do some "important" work while holding the mutex
       volatile uint32_t work = 0;
@@ -777,7 +777,7 @@ void ContentionMedPrioTask(void *argument)
       contentionCounter++;
       
       // Log that medium priority task has the mutex
-      VA_LogUserTrace(52, (int32_t)medPrioAccess);
+      VA_LogTrace(52, (int32_t)medPrioAccess);
       
       // Do some quick work while holding the mutex (10ms)
       volatile uint32_t work = 0;
@@ -793,7 +793,7 @@ void ContentionMedPrioTask(void *argument)
     else
     {
       // Timeout waiting for mutex - log the failed attempt
-      VA_LogUserTrace(52, -1); // Negative value indicates timeout
+      VA_LogTrace(52, -1); // Negative value indicates timeout
     }
     
     // Run every 150ms
@@ -832,7 +832,7 @@ void ContentionHighPrioTask(void *argument)
       
       // Log that high priority task has the mutex
       // Use wait time as value to see how long we blocked
-      VA_LogUserTrace(53, (int32_t)waitTime);
+      VA_LogTrace(53, (int32_t)waitTime);
       
       // High priority task does critical work quickly (5ms)
       volatile uint32_t work = 0;
@@ -848,9 +848,9 @@ void ContentionHighPrioTask(void *argument)
     else
     {
       // Timeout - this is bad for high priority task!
-      VA_LogUserTrace(53, -999); // Large negative value indicates critical timeout
+      VA_LogTrace(53, -999); // Large negative value indicates critical timeout
     }
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin); // Toggle LED to visualize activity
+   // HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin); // Toggle LED to visualize activity
     // Run every 120ms (creates interesting contention patterns with other tasks)
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(120));
   }

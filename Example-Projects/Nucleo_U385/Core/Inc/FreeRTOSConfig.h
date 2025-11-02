@@ -70,7 +70,7 @@ extern uint32_t SystemCoreClock;
 #define configTICK_RATE_HZ                       ((TickType_t)1000)
 #define configMAX_PRIORITIES                     ( 56 )
 #define configMINIMAL_STACK_SIZE                 ((uint16_t)128)
-#define configTOTAL_HEAP_SIZE                    ((size_t)8192)
+#define configTOTAL_HEAP_SIZE                    ((size_t)18192)
 #define configSTACK_ALLOCATION_FROM_SEPARATE_HEAP 0
 #define configMAX_TASK_NAME_LEN                  ( 16 )
 #define configUSE_TRACE_FACILITY                 1
@@ -162,7 +162,7 @@ header file. */
 #define SysTick_Handler xPortSysTickHandler
 
 /* USER CODE BEGIN Defines */
-#include "ViewAlyzerConfig_V10_4_Plus.h"
+#include "ViewAlyzerFreeRTOSHook_V10_4_Plus.h"
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
 /* USER CODE END Defines */
 
