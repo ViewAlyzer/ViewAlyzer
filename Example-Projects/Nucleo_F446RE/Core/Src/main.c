@@ -142,7 +142,7 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   SWO_Init(180000000, 2000000, VA_ITM_PORT); // CPU 180MHz, SWO 2MHz, port 0
-  HAL_Delay(1000);
+  HAL_Delay(2000);
   VA_Init(SystemCoreClock);
   VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_HISTOGRAM);      // Task02: Sine value from sensor
   VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);       // Task05: HAL tick counter

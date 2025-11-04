@@ -1,5 +1,5 @@
 /**
- * @file ViewAlyzerConfig_V10_4_Plus.h
+ * @file ViewAlyzerFreeRTOS_V10_4_Plus.h
  * @brief ViewAlyzer Recorder Firmware - FreeRTOS v10.4+ Configuration
  * 
  * Copyright (c) 2025 Free Radical Labs
