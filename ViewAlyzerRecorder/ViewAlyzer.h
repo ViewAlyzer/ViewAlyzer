@@ -66,7 +66,6 @@ extern "C"
 #define VA_FUNCTION_ENTRY(id) ((void)0)
 #define VA_FUNCTION_EXIT(id) ((void)0)
 #endif
-#endif // VA_ENABLED
 
 /**************************************************************
                         END USER CONFIGURATION
@@ -210,6 +209,8 @@ extern "C"
 bool va_isnit(void);
 
 extern volatile uint32_t notificationValue;
+
+#endif // VA_ENABLED
 
 #ifdef __cplusplus
 }
