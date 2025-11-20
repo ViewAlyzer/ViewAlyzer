@@ -678,7 +678,7 @@ void WorkloadManagerTask(void *argument)
             task_workloads[i] = workload_profiles[current_profile][i];
           }
           
-          VA_LogTrace(50, current_profile); // Log the current profile index
+     //     VA_LogTrace(50, current_profile); // Log the current profile index
           lastProfileChange = xTaskGetTickCount();
         }
       }
@@ -695,7 +695,7 @@ void WorkloadManagerTask(void *argument)
         task_workloads[i] = workload_profiles[current_profile][i];
       }
       
-      VA_LogTrace(50, current_profile); // Log the current profile index
+  //    VA_LogTrace(50, current_profile); // Log the current profile index
       lastProfileChange = xTaskGetTickCount();
     }
     

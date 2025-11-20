@@ -165,6 +165,10 @@ int main(void)
   VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_COUNTER);  // ContentionLow: How many times accessed mutex
   VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_COUNTER);  // ContentionMed: How many times accessed mutex (-1 = timeout)
   VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_GRAPH);     // ContentionHigh: Wait time in ticks to get mutex
+  
+  // Noise generation task traces
+  VA_RegisterUserTrace(60, "Noisy Sine Wave", VA_USER_TYPE_GRAPH);    // NoisySineWave: Sine wave with random noise
+  VA_RegisterUserTrace(61, "High Freq Noise", VA_USER_TYPE_GRAPH);    // HighFreqNoise: Pure random noise
 
   /* Init scheduler */
   osKernelInitialize();

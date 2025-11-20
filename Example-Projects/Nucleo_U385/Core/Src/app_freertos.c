@@ -114,6 +114,8 @@ TaskHandle_t workloadManagerTaskHandle = NULL;
 TaskHandle_t contentionHighPrioTaskHandle = NULL;  // High priority contention test task
 TaskHandle_t contentionMedPrioTaskHandle = NULL;   // Medium priority contention test task
 TaskHandle_t contentionLowPrioTaskHandle = NULL;   // Low priority contention test task
+TaskHandle_t noisySineWaveTaskHandle = NULL;       // Task that outputs sine wave with noise
+TaskHandle_t highFreqNoiseTaskHandle = NULL;       // Task that outputs high frequency noise
 
 // Native FreeRTOS synchronization objects
 QueueHandle_t dataQueue = NULL;          // For passing data between tasks
@@ -164,6 +166,8 @@ void StartTask08(void *argument);
 void ContentionHighPrioTask(void *argument);
 void ContentionMedPrioTask(void *argument);
 void ContentionLowPrioTask(void *argument);
+void NoisySineWaveTask(void *argument);
+void HighFreqNoiseTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -254,6 +258,10 @@ void MX_FREERTOS_Init(void)
   xTaskCreate(ContentionHighPrioTask, "ContentionHigh", 128, NULL, tskIDLE_PRIORITY + 5, &contentionHighPrioTaskHandle); // Highest priority
   xTaskCreate(ContentionMedPrioTask, "ContentionMed", 128, NULL, tskIDLE_PRIORITY + 3, &contentionMedPrioTaskHandle);    // Medium priority
   xTaskCreate(ContentionLowPrioTask, "ContentionLow", 128, NULL, tskIDLE_PRIORITY + 1, &contentionLowPrioTaskHandle);    // Low priority
+  
+  // Noise generation tasks for testing filters
+  xTaskCreate(NoisySineWaveTask, "NoisySineWave", 128, NULL, tskIDLE_PRIORITY + 1, &noisySineWaveTaskHandle);  // Sine wave with noise
+  xTaskCreate(HighFreqNoiseTask, "HighFreqNoise", 128, NULL, tskIDLE_PRIORITY + 1, &highFreqNoiseTaskHandle);  // High frequency noise
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -304,7 +312,7 @@ void StartDefaultTask(void *argument)
       }
     }
     
-    vTaskDelay(pdMS_TO_TICKS(500)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(16)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartDefaultTask */
 }
@@ -323,7 +331,7 @@ void StartTask02(void *argument)
   {
     // Generate sensor data and send to queue
     sineVal = get_next_sine_value(); // Get next sine value
-    VA_LogTrace(42, sineVal);    // Log the sine value trace
+  //  VA_LogTrace(42, sineVal);    // Log the sine value trace
     
     // Create sensor data structure
     SensorData_t sensorData = {
@@ -352,7 +360,7 @@ void StartTask02(void *argument)
       __NOP();
     }
 
-    vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(16)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartTask02 */
 }
@@ -386,13 +394,13 @@ void StartTask03(void *argument)
         }
         
         // Log processed data
-        VA_LogTrace(46, receivedData.sensorValue);
+   //     VA_LogTrace(46, receivedData.sensorValue);
       }
     }
     
     // Also wait for notification from Task 4
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(16));
   }
   /* USER CODE END StartTask03 */
 }
@@ -432,7 +440,7 @@ void StartTask04(void *argument)
       xTaskNotify(myTask06Handle, ulValue++, eSetValueWithOverwrite);
     }
     
-    vTaskDelay(pdMS_TO_TICKS(100)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(16)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartTask04 */
 }
@@ -486,7 +494,7 @@ void StartTask05(void *argument)
       sharedAccumulator += sum;
       
       // Log the shared counter value
-      VA_LogTrace(47, sharedCounter);
+     // VA_LogTrace(47, sharedCounter);
       
       xSemaphoreGive(sharedResourceMutex);
     }
@@ -500,9 +508,9 @@ void StartTask05(void *argument)
     }
 
     // Log the amount of stack used for debugging
-    VA_LogTrace(43, HAL_GetTick()); // Log tick counter
+   // VA_LogTrace(43, HAL_GetTick()); // Log tick counter
 
-    vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(16)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartTask05 */
 }
@@ -550,7 +558,7 @@ void StartTask06(void *argument)
       }
     }
     
-    vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(16)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartTask06 */
 }
@@ -573,7 +581,7 @@ void StartTask07(void *argument)
       // Safe to use printf or other print functions here
       // In this case, we'll just do some computation to simulate protected operation
       volatile uint32_t protected_operation = HAL_GetTick() * 2;
-      VA_LogTrace(48, protected_operation); // Log protected operation result
+   //   VA_LogTrace(48, protected_operation); // Log protected operation result
       
       xSemaphoreGive(printMutex);
     }
@@ -586,7 +594,7 @@ void StartTask07(void *argument)
       __NOP();
     }
     
-    vTaskDelay(pdMS_TO_TICKS(100)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(16)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartTask07 */
 }
@@ -621,7 +629,7 @@ void StartTask08(void *argument)
       volatile float localAccumulator = sharedAccumulator;
       
       // Log the shared values
-      VA_LogTrace(49, localCounter);
+//VA_LogTrace(49, localCounter);
       
       xSemaphoreGive(sharedResourceMutex);
     }
@@ -641,10 +649,10 @@ void StartTask08(void *argument)
     }
 
     // Log function exit
-    VA_LogToggle(44, TOGGLE_LOW);
-    VA_LogUserEvent(45, USER_EVENT_END);
+ //   VA_LogToggle(44, TOGGLE_LOW);
+//    VA_LogUserEvent(45, USER_EVENT_END);
     
-    vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(16)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartTask08 */
 }
@@ -678,7 +686,7 @@ void WorkloadManagerTask(void *argument)
             task_workloads[i] = workload_profiles[current_profile][i];
           }
           
-          VA_LogTrace(50, current_profile); // Log the current profile index
+       //   VA_LogTrace(50, current_profile); // Log the current profile index
           lastProfileChange = xTaskGetTickCount();
         }
       }
@@ -695,7 +703,7 @@ void WorkloadManagerTask(void *argument)
         task_workloads[i] = workload_profiles[current_profile][i];
       }
       
-      VA_LogTrace(50, current_profile); // Log the current profile index
+   //   VA_LogTrace(50, current_profile); // Log the current profile index
       lastProfileChange = xTaskGetTickCount();
     }
     
@@ -731,7 +739,7 @@ void ContentionLowPrioTask(void *argument)
       contentionCounter++;
       
       // Log that low priority task has the mutex
-      VA_LogTrace(51, (int32_t)lowPrioAccess);
+   //   VA_LogTrace(51, (int32_t)lowPrioAccess);
       
       // Do some "important" work while holding the mutex
       volatile uint32_t work = 0;
@@ -777,7 +785,7 @@ void ContentionMedPrioTask(void *argument)
       contentionCounter++;
       
       // Log that medium priority task has the mutex
-      VA_LogTrace(52, (int32_t)medPrioAccess);
+  //    VA_LogTrace(52, (int32_t)medPrioAccess);
       
       // Do some quick work while holding the mutex (10ms)
       volatile uint32_t work = 0;
@@ -793,7 +801,7 @@ void ContentionMedPrioTask(void *argument)
     else
     {
       // Timeout waiting for mutex - log the failed attempt
-      VA_LogTrace(52, -1); // Negative value indicates timeout
+   //   VA_LogTrace(52, -1); // Negative value indicates timeout
     }
     
     // Run every 150ms
@@ -832,7 +840,7 @@ void ContentionHighPrioTask(void *argument)
       
       // Log that high priority task has the mutex
       // Use wait time as value to see how long we blocked
-      VA_LogTrace(53, (int32_t)waitTime);
+   //   VA_LogTrace(53, (int32_t)waitTime);
       
       // High priority task does critical work quickly (5ms)
       volatile uint32_t work = 0;
@@ -848,13 +856,77 @@ void ContentionHighPrioTask(void *argument)
     else
     {
       // Timeout - this is bad for high priority task!
-      VA_LogTrace(53, -999); // Large negative value indicates critical timeout
+  //    VA_LogTrace(53, -999); // Large negative value indicates critical timeout
     }
    // HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin); // Toggle LED to visualize activity
     // Run every 120ms (creates interesting contention patterns with other tasks)
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(120));
   }
   /* USER CODE END ContentionHighPrioTask */
+}
+
+/* USER CODE BEGIN Header_NoisySineWaveTask */
+/**
+ * @brief Task that generates a sine wave with added random noise
+ *        Useful for testing low-pass filters and noise reduction on the frontend
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_NoisySineWaveTask */
+void NoisySineWaveTask(void *argument)
+{
+  /* USER CODE BEGIN NoisySineWaveTask */
+  uint16_t local_sine_index = 0;
+  
+  for (;;)
+  {
+    // Generate clean sine wave value
+    float radians = (local_sine_index * 2.0f * (float)M_PI) / 360.0f;
+    float sine = sinf(radians);                      // -1.0 to 1.0
+    float clean_value = (sine + 1.0f) * 100.0f;      // 0 to 200
+    
+    // Add random noise (±20% of full scale, which is ±40 units)
+    int32_t noise = (rand() % 81) - 40;  // -40 to +40
+    int32_t noisy_value = (int32_t)clean_value + noise;
+    
+    // Clamp to valid range
+    if (noisy_value < 0) noisy_value = 0;
+    if (noisy_value > 200) noisy_value = 200;
+    
+    // Log the noisy sine wave value (trace ID 60)
+    VA_LogTrace(60, (int32_t)noisy_value);
+    
+    local_sine_index = (local_sine_index + 1) % 360;
+    
+    vTaskDelay(pdMS_TO_TICKS(16)); // 16ms = ~60Hz update rate
+  }
+  /* USER CODE END NoisySineWaveTask */
+}
+
+/* USER CODE BEGIN Header_HighFreqNoiseTask */
+/**
+ * @brief Task that generates high-frequency random noise
+ *        Useful for testing filters and visualizing noise characteristics
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_HighFreqNoiseTask */
+void HighFreqNoiseTask(void *argument)
+{
+  /* USER CODE BEGIN HighFreqNoiseTask */
+  for (;;)
+  {
+    // Generate completely random high-frequency noise
+    // Value range: 0 to 200 (same as other signals for easy comparison)
+    int32_t noise_value = rand() % 201;  // 0 to 200
+    
+    // Log the noise value (trace ID 61)
+    VA_LogTrace(61, noise_value);
+    
+    // Update at high frequency (4ms = 250Hz) to create high-freq noise
+    vTaskDelay(pdMS_TO_TICKS(4));
+  }
+  /* USER CODE END HighFreqNoiseTask */
 }
 
 /* USER CODE END Application */

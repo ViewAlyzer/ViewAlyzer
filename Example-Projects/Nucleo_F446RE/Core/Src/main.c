@@ -107,7 +107,15 @@ static void SWO_Init(uint32_t cpu_hz, uint32_t swo_baud, uint32_t port)
                                  // optional: timestamps, sync:
                                  // ITM->TCR |= ITM_TCR_TSENA_Msk | ITM_TCR_SYNCENA_Msk;
 }
-
+/* Set interrupt handlers */
+/* Handle PD0 interrupt */
+ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+ {
+  if(GPIO_Pin == GPIO_PIN_4) {
+    // Handle the interrupt for PD0 here
+    
+  }
+ }
 /* USER CODE END 0 */
 
 /**
@@ -144,7 +152,7 @@ int main(void)
   SWO_Init(180000000, 2000000, VA_ITM_PORT); // CPU 180MHz, SWO 2MHz, port 0
   HAL_Delay(2000);
   VA_Init(SystemCoreClock);
-  VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_HISTOGRAM);      // Task02: Sine value from sensor
+  VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_GRAPH);      // Task02: Sine value from sensor
   VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);       // Task05: HAL tick counter
   VA_RegisterUserTrace(44, "Task08 Toggle", VA_USER_TYPE_TOGGLE);     // Task08: Function entry/exit toggle
   VA_RegisterUserFunction(45, "Custom Function");                     // Task08: Function timing
@@ -152,7 +160,7 @@ int main(void)
   VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_COUNTER);   // Task05: Mutex-protected shared counter
   VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);       // Task07: Mutex-protected operation result
   VA_RegisterUserTrace(49, "Local Counter", VA_USER_TYPE_GRAPH);      // Task08: Local copy of shared counter
-  VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_BAR);     // WorkloadManager: Current profile index
+ // VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_BAR);     // WorkloadManager: Current profile index
 
   // Contention test task traces
   VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_COUNTER); // ContentionLow: How many times accessed mutex
