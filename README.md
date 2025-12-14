@@ -44,13 +44,7 @@ This repository includes:
 
 ### Reporting Issues
 - **Bug Reports**: Use our [bug report template](../../issues/new?assignees=&labels=bug&projects=&template=bug_report.md)
-- **Feature Requests**: Use our [feature request template](../../issues/new?assignees=&labels=enhancement&projects=&template=feature_request.md)
 - Please search existing issues before creating new ones
-
-### Pull Requests
-- Fork the repository and create a feature branch
-- Use our [PR template](../../compare) when submitting
-- All PRs will be reviewed by maintainers
 
 ### Discussion Categories
 
@@ -58,7 +52,7 @@ This repository includes:
 Updates from maintainers
 
 **[Feature Requests](../../discussions/categories/feature-request)**  
-Share ideas for new features (also submit to [viewalyzer.net/feedback.html](https://viewalyzer.net/feedback.html) for voting)
+
 
 **[General](../../discussions/categories/general)**  
 Chat about anything and everything here
