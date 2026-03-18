@@ -51,13 +51,14 @@ set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../ViewAlyzerRecorde
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    ${VIEWALYZER_RECORDER_DIR}/ViewAlyzer.c
+    ${VIEWALYZER_RECORDER_DIR}/core/ViewAlyzer.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-    ${VIEWALYZER_RECORDER_DIR}
+    ${VIEWALYZER_RECORDER_DIR}/core
+    ${VIEWALYZER_RECORDER_DIR}/freertos
 )
 
 # Add project symbols (macros)

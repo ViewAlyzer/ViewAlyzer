@@ -39,10 +39,11 @@ extern "C"
 #define VA_TRACE_FREERTOS 1  // Can be defined in your build system to 0 to disable FreeRTOS tracing
 #endif
 
-#define ST_LINK_ITM 1u
-#define JLINK_RTT   2u
+#define ST_LINK_ITM        1u
+#define JLINK_RTT          2u
+#define CUSTOM_TRANSPORT   3u
 
-#define VA_TRANSPORT ST_LINK_ITM  // Select active transport backend
+#define VA_TRANSPORT CUSTOM_TRANSPORT  // Select active transport backend
 #define LOG_PENDSV 0             // Experimental, unused
 
 #define VA_ITM_PORT    1         // ITM stimulus port where logs are sent when using ST-LINK transport
@@ -77,8 +78,16 @@ extern "C"
 **************************************************************/
 
 // --- Derived Configuration ---
-#define VA_TRANSPORT_IS_ST_LINK ((VA_TRANSPORT) == ST_LINK_ITM)
-#define VA_TRANSPORT_IS_JLINK ((VA_TRANSPORT) == JLINK_RTT)
+#define VA_TRANSPORT_IS_ST_LINK  ((VA_TRANSPORT) == ST_LINK_ITM)
+#define VA_TRANSPORT_IS_JLINK    ((VA_TRANSPORT) == JLINK_RTT)
+#define VA_TRANSPORT_IS_CUSTOM   ((VA_TRANSPORT) == CUSTOM_TRANSPORT)
+
+// Maximum raw packet size (before COBS encoding).
+// Largest packet is VA_LogString: 11-byte header + up to 200-byte message.
+#define VA_MAX_PACKET_SIZE 212
+
+// User-provided send function signature for custom transport
+typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 
 #if (VA_TRACE_FREERTOS == 1)
 #include "FreeRTOS.h"
@@ -102,6 +111,8 @@ extern "C"
 #define VA_EVENT_USER_TOGGLE      0x0A
 #define VA_EVENT_USER_FUNCTION    0x0B
 #define VA_EVENT_MUTEX_CONTENTION 0x0C
+#define VA_EVENT_STRING_EVENT    0x0D
+#define VA_EVENT_FLOAT_TRACE      0x0E
 
 
 // --- Setup Message Codes ---
@@ -157,12 +168,18 @@ extern "C"
 // --- Public Functions ---
 #if (VA_ENABLED == 1)
     // user API
+#if VA_TRANSPORT_IS_CUSTOM
+    void VA_RegisterTransportSend(VA_TransportSendFn sendFn);
+#endif
     void VA_Init(uint32_t cpu_freq);
+    void VA_TickOverflowCheck(void);  // call periodically (e.g. every 1-10 s) to prevent DWT rollover misses
     void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type);
     void VA_RegisterUserFunction(uint8_t id, const char *name);
     void VA_LogISRStart(uint8_t isrId);
     void VA_LogISREnd(uint8_t isrId);
     void VA_LogTrace(uint8_t id, int32_t value);
+    void VA_LogTraceFloat(uint8_t id, float value);
+    void VA_LogString(uint8_t id, const char *msg);
     void VA_LogToggle(uint8_t id, bool state);
     void VA_LogUserEvent(uint8_t id, bool state);
 
@@ -186,12 +203,16 @@ extern "C"
 
 #else
 // --- Empty stubs ---
+#define VA_RegisterTransportSend(fn) ((void)0)
 #define VA_Init(cpu_freq) ((void)0)
+#define VA_TickOverflowCheck() ((void)0)
 #define VA_RegisterUserTrace(id, name, type) ((void)0)
 #define VA_RegisterUserFunction(id, name) ((void)0)
 #define VA_LogISRStart(isrId) ((void)0)
 #define VA_LogISREnd(isrId) ((void)0)
 #define VA_LogTrace(id, value) ((void)0)
+#define VA_LogTraceFloat(id, value) ((void)0)
+#define VA_LogString(id, msg) ((void)0)
 #define VA_LogToggle(id, state) ((void)0)
 #define VA_LogUserEvent(id, state) ((void)0)
 

@@ -44,6 +44,11 @@ extern "C"
 #endif
 #endif
 
+#if VA_TRANSPORT_IS_CUSTOM
+#include "viewalyzer_cobs.h"
+    static VA_TransportSendFn s_user_send_fn = NULL;
+#endif
+
 #define VA_UNUSED(x) (void)(x)
 // Optional critical section helpers (preserve PRIMASK)
 #ifdef VA_ALLOWED_TO_DISABLE_INTERRUPTS
@@ -159,7 +164,7 @@ static void _va_send_bytes(const uint8_t *data, uint32_t length)
     }
 }
 
-#else  // VA_TRANSPORT_IS_ST_LINK
+#elif VA_TRANSPORT_IS_JLINK
     // --- RTT Send Function ---
 static void _va_send_bytes(const uint8_t *data, uint32_t length)
 {
@@ -168,7 +173,34 @@ static void _va_send_bytes(const uint8_t *data, uint32_t length)
     // NOTE: no CS here to avoid nested PRIMASK variables; callers are CS-wrapped.
     SEGGER_RTT_Write(VA_RTT_CHANNEL, data, length);
 }
-#endif // VA_TRANSPORT_IS_ST_LINK
+
+#elif VA_TRANSPORT_IS_CUSTOM
+    // --- Custom Transport Send Function ---
+static void _va_send_bytes(const uint8_t *data, uint32_t length)
+{
+    if (!VA_IS_INIT || s_user_send_fn == NULL)
+        return;
+    s_user_send_fn(data, length);
+}
+
+#else
+#error "VA_TRANSPORT must be ST_LINK_ITM, JLINK_RTT, or CUSTOM_TRANSPORT"
+#endif // VA_TRANSPORT
+
+// --- Packet Emission Layer ---
+// For ITM/RTT, packets are sent raw (sync-marker framing on host side).
+// For custom transport, each packet is COBS-encoded with a 0x00 delimiter
+// so the host can find frame boundaries on a raw byte stream.
+#if VA_TRANSPORT_IS_CUSTOM
+static void _va_emit_packet(const uint8_t *data, uint32_t length)
+{
+    uint8_t cobs_buf[VA_MAX_PACKET_SIZE + (VA_MAX_PACKET_SIZE / 254) + 2];
+    size_t encoded_len = va_cobs_encode(data, (size_t)length, cobs_buf);
+    _va_send_bytes(cobs_buf, (uint32_t)encoded_len);
+}
+#else
+#define _va_emit_packet(data, length) _va_send_bytes(data, length)
+#endif
 
 static void _va_send_event_packet(uint8_t type_byte, uint8_t id, uint64_t timestamp)
 {
@@ -185,7 +217,7 @@ static void _va_send_event_packet(uint8_t type_byte, uint8_t id, uint64_t timest
     packet[8] = (uint8_t)(timestamp >> 48);
     packet[9] = (uint8_t)(timestamp >> 56);
 
-    _va_send_bytes(packet, 10);
+    _va_emit_packet(packet, 10);
 }
 
 static void _va_send_setup_packet(uint8_t setupCode, uint8_t id, const char *name)
@@ -196,13 +228,13 @@ static void _va_send_setup_packet(uint8_t setupCode, uint8_t id, const char *nam
         name_len = VA_MAX_TASK_NAME_LEN - 1;
     }
 
-    uint8_t header[3];
-    header[0] = setupCode;
-    header[1] = id;
-    header[2] = name_len;
+    uint8_t buf[3 + VA_MAX_TASK_NAME_LEN];
+    buf[0] = setupCode;
+    buf[1] = id;
+    buf[2] = name_len;
+    memcpy(&buf[3], name, name_len);
 
-    _va_send_bytes(header, 3);
-    _va_send_bytes((const uint8_t *)name, name_len);
+    _va_emit_packet(buf, 3 + name_len);
 }
 
 static void _va_send_user_setup_packet(uint8_t id, uint8_t type, const char *name)
@@ -212,13 +244,14 @@ static void _va_send_user_setup_packet(uint8_t id, uint8_t type, const char *nam
     {
         name_len = VA_MAX_TASK_NAME_LEN - 1;
     }
-    uint8_t header[4];
-    header[0] = VA_SETUP_USER_TRACE;
-    header[1] = id;
-    header[2] = type;
-    header[3] = name_len;
-    _va_send_bytes(header, 4);
-    _va_send_bytes((const uint8_t *)name, name_len);
+    uint8_t buf[4 + VA_MAX_TASK_NAME_LEN];
+    buf[0] = VA_SETUP_USER_TRACE;
+    buf[1] = id;
+    buf[2] = type;
+    buf[3] = name_len;
+    memcpy(&buf[4], name, name_len);
+
+    _va_emit_packet(buf, 4 + name_len);
 }
 
 static void _va_send_user_event_packet(uint8_t id, int32_t value, uint64_t timestamp)
@@ -238,7 +271,30 @@ static void _va_send_user_event_packet(uint8_t id, int32_t value, uint64_t times
     packet[11] = (uint8_t)(value >> 8);
     packet[12] = (uint8_t)(value >> 16);
     packet[13] = (uint8_t)(value >> 24);
-    _va_send_bytes(packet, 14);
+    _va_emit_packet(packet, 14);
+}
+
+static void _va_send_float_event_packet(uint8_t id, float value, uint64_t timestamp)
+{
+    uint8_t packet[14];
+    uint32_t fbits;
+    memcpy(&fbits, &value, sizeof(fbits));
+
+    packet[0] = VA_EVENT_FLOAT_TRACE;
+    packet[1] = id;
+    packet[2] = (uint8_t)(timestamp >> 0);
+    packet[3] = (uint8_t)(timestamp >> 8);
+    packet[4] = (uint8_t)(timestamp >> 16);
+    packet[5] = (uint8_t)(timestamp >> 24);
+    packet[6] = (uint8_t)(timestamp >> 32);
+    packet[7] = (uint8_t)(timestamp >> 40);
+    packet[8] = (uint8_t)(timestamp >> 48);
+    packet[9] = (uint8_t)(timestamp >> 56);
+    packet[10] = (uint8_t)(fbits >> 0);
+    packet[11] = (uint8_t)(fbits >> 8);
+    packet[12] = (uint8_t)(fbits >> 16);
+    packet[13] = (uint8_t)(fbits >> 24);
+    _va_emit_packet(packet, 14);
 }
 
 static void _va_send_user_toggle_event_packet(uint8_t id, VA_UserToggleState_t state, uint64_t timestamp)
@@ -256,7 +312,7 @@ static void _va_send_user_toggle_event_packet(uint8_t id, VA_UserToggleState_t s
     packet[9] = (uint8_t)(timestamp >> 56);
     packet[10] = (uint8_t)(state);
 
-    _va_send_bytes(packet, 11);
+    _va_emit_packet(packet, 11);
 }
 
 static inline uint64_t _va_get_timestamp(void)
@@ -287,6 +343,24 @@ static inline uint64_t _va_get_timestamp(void)
     return (((uint64_t)high_part) << 32) | low_part;
 }
 
+/**
+ * @brief Periodically poll the DWT cycle counter to catch rollovers that
+ *        would otherwise be missed during long idle periods.
+ *
+ * At 170 MHz the 32-bit DWT->CYCCNT wraps every ~25.3 s.  If no ViewAlyzer
+ * event is logged for longer than that, the overflow counter will miss
+ * a wrap and all subsequent 64-bit timestamps will be off by 2^32 cycles.
+ *
+ * Call this from SysTick_Handler, a low-priority periodic task, or any
+ * context that runs at least once every 10–20 seconds.
+ * The function is very lightweight (reads DWT->CYCCNT, compares, returns).
+ */
+void VA_TickOverflowCheck(void)
+{
+    if (!VA_IS_INIT) return;
+    (void)_va_get_timestamp();   // updates g_dwt_overflow_count as a side-effect
+}
+
 // TODO: Future improvement allow user to use Timers
 static void _va_enable_dwt_counter(void)
 {
@@ -314,7 +388,7 @@ static void _va_send_notification_event_packet(uint8_t type_byte, uint8_t id, ui
     packet[12] = (uint8_t)(value >> 8);
     packet[13] = (uint8_t)(value >> 16);
     packet[14] = (uint8_t)(value >> 24);
-    _va_send_bytes(packet, 15);
+    _va_emit_packet(packet, 15);
 }
 
 static void _va_send_mutex_contention_packet(uint8_t mutex_id, uint8_t waiting_task_id, uint8_t holder_task_id, uint64_t timestamp)
@@ -332,7 +406,7 @@ static void _va_send_mutex_contention_packet(uint8_t mutex_id, uint8_t waiting_t
     packet[9] = (uint8_t)(timestamp >> 40);
     packet[10] = (uint8_t)(timestamp >> 48);
     packet[11] = (uint8_t)(timestamp >> 56);
-    _va_send_bytes(packet, 12);
+    _va_emit_packet(packet, 12);
 }
 
 static void _va_send_task_create_packet(uint8_t id, uint64_t timestamp, uint32_t priority, uint32_t base_priority, uint32_t stack_size)
@@ -362,7 +436,7 @@ static void _va_send_task_create_packet(uint8_t id, uint64_t timestamp, uint32_t
     packet[19] = (uint8_t)(stack_size >> 8);
     packet[20] = (uint8_t)(stack_size >> 16);
     packet[21] = (uint8_t)(stack_size >> 24);
-    _va_send_bytes(packet, 22);
+    _va_emit_packet(packet, 22);
 }
 
 // Send Stack Usage Packet: [Type(1B)] [ID(1B)] [Timestamp(8B)] [StackUsed(4B)] [StackTotal(4B)]
@@ -390,7 +464,7 @@ static void _va_send_stack_usage_packet(uint8_t id, uint64_t timestamp, uint32_t
     packet[15] = (uint8_t)(stack_total >> 8);
     packet[16] = (uint8_t)(stack_total >> 16);
     packet[17] = (uint8_t)(stack_total >> 24);
-    _va_send_bytes(packet, 18);
+    _va_emit_packet(packet, 18);
 }
 
 static uint8_t _va_find_task_id(TaskHandle_t handle)
@@ -585,6 +659,41 @@ void VA_LogTrace(uint8_t id, int32_t value)
 {
     VA_CS_ENTER();
     _va_send_user_event_packet(id, value, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
+void VA_LogTraceFloat(uint8_t id, float value)
+{
+    VA_CS_ENTER();
+    _va_send_float_event_packet(id, value, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
+void VA_LogString(uint8_t id, const char *msg)
+{
+    if (!msg) return;
+    uint8_t len = (uint8_t)strlen(msg);
+    if (len == 0) return;
+    if (len > 200) len = 200;
+
+    VA_CS_ENTER();
+    uint64_t ts = _va_get_timestamp();
+
+    uint8_t buf[11 + 200];
+    buf[0] = VA_EVENT_STRING_EVENT;
+    buf[1] = id;
+    buf[2]  = (uint8_t)(ts >> 0);
+    buf[3]  = (uint8_t)(ts >> 8);
+    buf[4]  = (uint8_t)(ts >> 16);
+    buf[5]  = (uint8_t)(ts >> 24);
+    buf[6]  = (uint8_t)(ts >> 32);
+    buf[7]  = (uint8_t)(ts >> 40);
+    buf[8]  = (uint8_t)(ts >> 48);
+    buf[9]  = (uint8_t)(ts >> 56);
+    buf[10] = len;
+    memcpy(&buf[11], msg, len);
+
+    _va_emit_packet(buf, 11 + len);
     VA_CS_EXIT();
 }
 
@@ -1174,6 +1283,13 @@ void VA_LogUserEvent(uint8_t id, bool state)
 }
 
 // --- Initialization ---
+#if VA_TRANSPORT_IS_CUSTOM
+void VA_RegisterTransportSend(VA_TransportSendFn sendFn)
+{
+    s_user_send_fn = sendFn;
+}
+#endif
+
 void VA_Init(uint32_t cpu_freq)
 {
     VA_CS_ENTER();
@@ -1204,7 +1320,7 @@ void VA_Init(uint32_t cpu_freq)
     ITM->LAR = 0xC5ACCE55;
     ITM->TCR |= ITM_TCR_ITMENA_Msk;
     ITM->TER |= (1UL << VA_ITM_PORT);
-#else
+#elif VA_TRANSPORT_IS_JLINK
 #if (VA_CONFIGURE_RTT == 1)
         SEGGER_RTT_Init();
     #if VA_RTT_BUFFER_SIZE > 0 
@@ -1214,11 +1330,13 @@ void VA_Init(uint32_t cpu_freq)
         SEGGER_RTT_ConfigUpBuffer(VA_RTT_CHANNEL, "ViewAlyzer", NULL, 0, VA_RTT_MODE);
     #endif // VA_RTT_BUFFER_SIZE > 0
 #endif // VA_CONFIGURE_RTT
-#endif // VA_TRANSPORT_IS_ST_LINK
+#elif VA_TRANSPORT_IS_CUSTOM
+    // Nothing to init — user provides send function via VA_RegisterTransportSend()
+#endif // VA_TRANSPORT
     VA_IS_INIT = true;
 
     // Emit sync marker first so host parsers can discard any preceding text/banners
-    _va_send_bytes(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
+    _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
     char info_buf[40];
     snprintf(info_buf, sizeof(info_buf), "CLK:%lu", _va_cpu_freq);

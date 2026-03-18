@@ -607,7 +607,7 @@ void StartTask08(void *argument)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     
     // Log function entry
-    VA_LogToggle(44, TOGGLE_HIGH);
+   // VA_LogToggle(44, TOGGLE_HIGH);
     VA_LogUserEvent(45, USER_EVENT_START);
     
     // Get inverted sine value
@@ -641,7 +641,7 @@ void StartTask08(void *argument)
     }
 
     // Log function exit
-    VA_LogToggle(44, TOGGLE_LOW);
+   // VA_LogToggle(44, TOGGLE_LOW);
     VA_LogUserEvent(45, USER_EVENT_END);
     
     vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay

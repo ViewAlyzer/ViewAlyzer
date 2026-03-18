@@ -131,7 +131,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(3000);
+  HAL_Delay(1000);
   SWO_Init(SystemCoreClock, 2000000u, VA_ITM_PORT);
   VA_Init(SystemCoreClock);                                           // Initialize ViewAlyzer with 2 MHz SWO frequency
   VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_HISTOGRAM);      // Task02: Sine value from sensor

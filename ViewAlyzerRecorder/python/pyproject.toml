@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "viewalyzer"
+version = "0.1.0"
+description = "Python library for sending ViewAlyzer protocol data over UDP with COBS framing"
+readme = "README.md"
+license = {text = "See LICENSE"}
+requires-python = ">=3.8"
+authors = [{name = "Free Radical Labs"}]
+keywords = ["embedded", "profiler", "rtos", "tracing", "viewalyzer"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Embedded Systems",
+    "Programming Language :: Python :: 3",
+]
+
+# Zero external dependencies — stdlib only
+dependencies = []
+
+[project.urls]
+Homepage = "https://viewalyzer.net"
+Documentation = "https://viewalyzer.net/docs.html"
+Repository = "https://github.com/ViewAlyzer/ViewAlyzer"

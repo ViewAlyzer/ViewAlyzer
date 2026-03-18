@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ViewAlyzer.h"
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +34,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+/* Set to 1 for normal FreeRTOS mode, 0 for bare-metal trace-only mode */
+#define USE_FREERTOS  0
 
 /* USER CODE END PD */
 
@@ -58,6 +62,31 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+int _write(int file, char *data, int len)
+{
+    UNUSED(file);
+    // Transmit data using UART2
+    for (int i = 0; i < len; i++)
+    {
+        // Send the character
+        LPUART1->TDR = (uint16_t)data[i];
+        // Wait for the transmit buffer to be empty
+        while (!(LPUART1->ISR & USART_ISR_TXE));
+    }
+    return len;
+}
+
+#if VA_TRANSPORT_IS_CUSTOM
+// ViewAlyzer custom transport callback — sends COBS-encoded bytes over LPUART1
+static void va_lpuart_send(const uint8_t *data, uint32_t length)
+{
+    for (uint32_t i = 0; i < length; i++)
+    {
+        LPUART1->TDR = (uint16_t)data[i];
+        while (!(LPUART1->ISR & USART_ISR_TXE));
+    }
+}
+#endif
 
 static void SWO_Init(uint32_t cpu_hz, uint32_t swo_baud, uint32_t port)
 {
@@ -132,7 +161,15 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
+
+#if VA_TRANSPORT_IS_CUSTOM
+  // --- Custom transport: send ViewAlyzer data over LPUART1 ---
+  VA_RegisterTransportSend(va_lpuart_send);
+#else
+  // --- ST-Link SWO transport ---
   SWO_Init(170000000u, 2000000u, 1);
+#endif
+
   HAL_Delay(3000);
   VA_Init(SystemCoreClock);     
                                                         
@@ -153,12 +190,6 @@ int main(void)
   
   /* USER CODE END 2 */
 
-  /* Init scheduler */
-  osKernelInitialize();
-
-  /* Call init function for freertos objects (in cmsis_os2.c) */
-  MX_FREERTOS_Init();
-
   /* Initialize led */
   BSP_LED_Init(LED_GREEN);
 
@@ -166,7 +197,7 @@ int main(void)
   BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
   /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
-  BspCOMInit.BaudRate   = 115200;
+  BspCOMInit.BaudRate   = 250000;
   BspCOMInit.WordLength = COM_WORDLENGTH_8B;
   BspCOMInit.StopBits   = COM_STOPBITS_1;
   BspCOMInit.Parity     = COM_PARITY_NONE;
@@ -176,10 +207,18 @@ int main(void)
     Error_Handler();
   }
 
+#if USE_FREERTOS
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* Call init function for freertos objects (in cmsis_os2.c) */
+  MX_FREERTOS_Init();
+
   /* Start scheduler */
   osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
+#endif /* USE_FREERTOS */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -189,6 +228,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+#if !USE_FREERTOS
+    /* Bare-metal mode: manually send trace values */
+    static uint16_t sine_idx = 0;
+    float radians = (sine_idx * 2.0f * 3.14159265f) / 360.0f;
+    float sine = sinf(radians);
+    uint16_t sineValue = (uint16_t)((sine + 1.0f) * 100.0f);
+
+    VA_LogTrace(42, sineValue);                      // Sine Wave
+    VA_LogTrace(43, HAL_GetTick());                   // Tick Counter
+    VA_LogTrace(46, (uint16_t)(sineValue * 0.8f));    // Processed Data
+    VA_LogTrace(48, HAL_GetTick() * 2);               // Protected Op
+
+    sine_idx = (sine_idx + 1) % 360;
+
+    BSP_LED_Toggle(LED_GREEN);
+   // HAL_Delay(10);
+#endif /* !USE_FREERTOS */
   }
   /* USER CODE END 3 */
 }

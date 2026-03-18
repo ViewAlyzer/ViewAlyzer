@@ -29,10 +29,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdio.h"      // For printf
+#include "stdio.h"      // For printf, snprintf
 #include "ViewAlyzer.h" // For profiler functions
 #include <math.h>
 #include <stdlib.h> // For rand()
+#include <string.h> // For snprintf
 
 // Ensure DWT cycle counter is enabled *before* scheduler starts!
 // Typically in main() before MX_FREERTOS_Init():
@@ -116,6 +117,9 @@ TaskHandle_t workloadManagerTaskHandle = NULL;
 TaskHandle_t contentionHighPrioTaskHandle = NULL;  // High priority contention test task
 TaskHandle_t contentionMedPrioTaskHandle = NULL;   // Medium priority contention test task
 TaskHandle_t contentionLowPrioTaskHandle = NULL;   // Low priority contention test task
+TaskHandle_t normalHighPrioTaskHandle = NULL;      // High priority normal mutex task
+TaskHandle_t normalMedPrioTaskHandle = NULL;       // Medium priority normal mutex task
+TaskHandle_t normalLowPrioTaskHandle = NULL;       // Low priority normal mutex task
 
 // Native FreeRTOS synchronization objects
 QueueHandle_t dataQueue = NULL;          // For passing data between tasks
@@ -125,6 +129,7 @@ SemaphoreHandle_t countingSemaphore = NULL;     // Counting semaphore for resour
 SemaphoreHandle_t sharedResourceMutex = NULL;   // Mutex for protecting shared resources
 SemaphoreHandle_t printMutex = NULL;            // Mutex for protecting printf/debug output
 SemaphoreHandle_t contentionTestMutex = NULL;   // Mutex specifically for testing contention tracking
+SemaphoreHandle_t normalOpMutex = NULL;          // Mutex used properly without priority inversion
 
 // Data structures for queue communication
 typedef struct {
@@ -148,6 +153,9 @@ volatile uint32_t highPrioAccess = 0;
 volatile uint32_t medPrioAccess = 0;
 volatile uint32_t lowPrioAccess = 0;
 
+// Normal mutex shared variable
+volatile uint32_t normalSharedValue = 0;
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 extern void ITM_Print(const char *ptr); // Assuming you might use this
@@ -166,6 +174,9 @@ void StartTask08(void *argument);
 void ContentionHighPrioTask(void *argument);
 void ContentionMedPrioTask(void *argument);
 void ContentionLowPrioTask(void *argument);
+void NormalHighPrioTask(void *argument);
+void NormalMedPrioTask(void *argument);
+void NormalLowPrioTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -218,6 +229,7 @@ void MX_FREERTOS_Init(void)
   sharedResourceMutex = xSemaphoreCreateMutex();
   printMutex = xSemaphoreCreateMutex();
   contentionTestMutex = xSemaphoreCreateMutex(); // Mutex for contention testing
+  normalOpMutex = xSemaphoreCreateMutex();        // Mutex used properly (no priority inversion)
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -253,9 +265,14 @@ void MX_FREERTOS_Init(void)
   xTaskCreate(WorkloadManagerTask, "WorkloadManager", 256, NULL, tskIDLE_PRIORITY + 3, &workloadManagerTaskHandle); // Higher priority
   
   // Contention test tasks with different priorities to showcase mutex contention tracking
-  xTaskCreate(ContentionHighPrioTask, "ContentionHigh", 128, NULL, tskIDLE_PRIORITY + 5, &contentionHighPrioTaskHandle); // Highest priority
-  xTaskCreate(ContentionMedPrioTask, "ContentionMed", 128, NULL, tskIDLE_PRIORITY + 3, &contentionMedPrioTaskHandle);    // Medium priority
-  xTaskCreate(ContentionLowPrioTask, "ContentionLow", 128, NULL, tskIDLE_PRIORITY + 1, &contentionLowPrioTaskHandle);    // Low priority
+  xTaskCreate(ContentionHighPrioTask, "HighPrioTask", 128, NULL, tskIDLE_PRIORITY + 5, &contentionHighPrioTaskHandle); // Highest priority
+  xTaskCreate(ContentionMedPrioTask, "MedPrioTask", 128, NULL, tskIDLE_PRIORITY + 3, &contentionMedPrioTaskHandle);    // Medium priority
+  xTaskCreate(ContentionLowPrioTask, "LowPrioTask", 128, NULL, tskIDLE_PRIORITY + 1, &contentionLowPrioTaskHandle);    // Low priority
+
+  // Normal mutex tasks - different priorities but short critical sections, no priority inversion
+  xTaskCreate(NormalHighPrioTask, "NormalHigh", 128, NULL, tskIDLE_PRIORITY + 5, &normalHighPrioTaskHandle);
+  xTaskCreate(NormalMedPrioTask, "NormalMed", 128, NULL, tskIDLE_PRIORITY + 3, &normalMedPrioTaskHandle);
+  xTaskCreate(NormalLowPrioTask, "NormalLow", 128, NULL, tskIDLE_PRIORITY + 1, &normalLowPrioTaskHandle);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -276,6 +293,8 @@ void MX_FREERTOS_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
+  VA_LogString(1, "System started");
+  
   for (;;)
   {
     // Release binary semaphore for other tasks to use
@@ -306,7 +325,7 @@ void StartDefaultTask(void *argument)
       }
     }
     
-    vTaskDelay(pdMS_TO_TICKS(500)); // Use native FreeRTOS delay
+    vTaskDelay(pdMS_TO_TICKS(20)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartDefaultTask */
 }
@@ -326,6 +345,10 @@ void StartTask02(void *argument)
     // Generate sensor data and send to queue
     sineVal = get_next_sine_value(); // Get next sine value
     VA_LogTrace(42, sineVal);    // Log the sine value trace
+    
+    // Log sine as a float trace (normalized -1.0 to 1.0)
+    float radians = (sine_index * 2.0f * (float)M_PI) / 360.0f;
+    VA_LogTraceFloat(60, sinf(radians));  // Float sine wave
     
     // Create sensor data structure
     SensorData_t sensorData = {
@@ -490,6 +513,9 @@ void StartTask05(void *argument)
       // Log the shared counter value
       VA_LogTrace(47, sharedCounter);
       
+      // Log shared accumulator as float
+      VA_LogTraceFloat(61, sharedAccumulator);
+      
       xSemaphoreGive(sharedResourceMutex);
     }
 
@@ -587,7 +613,7 @@ void StartTask07(void *argument)
       // Simple calculation to consume CPU time
       __NOP();
     }
-    
+
     vTaskDelay(pdMS_TO_TICKS(100)); // Use native FreeRTOS delay
   }
   /* USER CODE END StartTask07 */
@@ -614,6 +640,7 @@ void StartTask08(void *argument)
     
     // Get inverted sine value
     invertedSineVal = 200 - sineVal;
+    VA_LogTraceFloat(63, (float)invertedSineVal / 100.0f - 1.0f);  // Inverted sine normalized
     
     // Access shared resource safely using mutex
     if (xSemaphoreTake(sharedResourceMutex, pdMS_TO_TICKS(50)) == pdPASS)
@@ -681,6 +708,11 @@ void WorkloadManagerTask(void *argument)
           }
           
           VA_LogTrace(50, current_profile); // Log the current profile index
+          {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "CMD profile %d", current_profile);
+            VA_LogString(1, buf);
+          }
           lastProfileChange = xTaskGetTickCount();
         }
       }
@@ -698,6 +730,11 @@ void WorkloadManagerTask(void *argument)
       }
       
       VA_LogTrace(50, current_profile); // Log the current profile index
+      {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Auto profile %d", current_profile);
+        VA_LogString(1, buf);
+      }
       lastProfileChange = xTaskGetTickCount();
     }
     
@@ -796,6 +833,7 @@ void ContentionMedPrioTask(void *argument)
     {
       // Timeout waiting for mutex - log the failed attempt
       VA_LogTrace(52, -1); // Negative value indicates timeout
+      VA_LogString(2, "MedPrio mutex timeout");
     }
     
     // Run every 150ms
@@ -835,6 +873,7 @@ void ContentionHighPrioTask(void *argument)
       // Log that high priority task has the mutex
       // Use wait time as value to see how long we blocked
       VA_LogTrace(53, (int32_t)waitTime);
+      VA_LogTraceFloat(62, (float)waitTime);  // Wait time as float (ms)
       
       // High priority task does critical work quickly (5ms)
       volatile uint32_t work = 0;
@@ -851,12 +890,122 @@ void ContentionHighPrioTask(void *argument)
     {
       // Timeout - this is bad for high priority task!
       VA_LogTrace(53, -999); // Large negative value indicates critical timeout
+      VA_LogString(2, "HighPrio CRITICAL timeout");
     }
    // HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin); // Toggle LED to visualize activity
     // Run every 120ms (creates interesting contention patterns with other tasks)
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(120));
   }
   /* USER CODE END ContentionHighPrioTask */
+}
+
+/* USER CODE BEGIN Header_NormalLowPrioTask */
+/**
+ * @brief Low priority task using normalOpMutex properly - short critical section, no delays while holding
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_NormalLowPrioTask */
+void NormalLowPrioTask(void *argument)
+{
+  /* USER CODE BEGIN NormalLowPrioTask */
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  for (;;)
+  {
+    // Acquire mutex, do quick work, release immediately - no priority inversion
+    if (xSemaphoreTake(normalOpMutex, pdMS_TO_TICKS(50)) == pdPASS)
+    {
+      // Very short critical section - just update shared value
+      normalSharedValue += 1;
+      VA_LogTrace(54, (int32_t)normalSharedValue);
+      xSemaphoreGive(normalOpMutex);
+    }
+
+    // Do the bulk of the work OUTSIDE the critical section
+    volatile uint32_t work = 0;
+    for (int i = 0; i < 20000; i++)
+    {
+      work += i;
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(200));
+  }
+  /* USER CODE END NormalLowPrioTask */
+}
+
+/* USER CODE BEGIN Header_NormalMedPrioTask */
+/**
+ * @brief Medium priority task using normalOpMutex properly - short critical section, no delays while holding
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_NormalMedPrioTask */
+void NormalMedPrioTask(void *argument)
+{
+  /* USER CODE BEGIN NormalMedPrioTask */
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  vTaskDelay(pdMS_TO_TICKS(25));
+
+  for (;;)
+  {
+    // Acquire mutex, do quick work, release immediately - no priority inversion
+    if (xSemaphoreTake(normalOpMutex, pdMS_TO_TICKS(50)) == pdPASS)
+    {
+      // Very short critical section - just read and update shared value
+      normalSharedValue += 10;
+      VA_LogTrace(55, (int32_t)normalSharedValue);
+      xSemaphoreGive(normalOpMutex);
+    }
+
+    // Do the bulk of the work OUTSIDE the critical section
+    volatile uint32_t work = 0;
+    for (int i = 0; i < 10000; i++)
+    {
+      work += i;
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(150));
+  }
+  /* USER CODE END NormalMedPrioTask */
+}
+
+/* USER CODE BEGIN Header_NormalHighPrioTask */
+/**
+ * @brief High priority task using normalOpMutex properly - short critical section, no delays while holding
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_NormalHighPrioTask */
+void NormalHighPrioTask(void *argument)
+{
+  /* USER CODE BEGIN NormalHighPrioTask */
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  vTaskDelay(pdMS_TO_TICKS(40));
+
+  for (;;)
+  {
+    // Acquire mutex, do quick work, release immediately - no priority inversion
+    if (xSemaphoreTake(normalOpMutex, pdMS_TO_TICKS(50)) == pdPASS)
+    {
+      // Very short critical section - just read and update shared value
+      normalSharedValue += 100;
+      VA_LogTrace(56, (int32_t)normalSharedValue);
+      xSemaphoreGive(normalOpMutex);
+    }
+
+    // Do the bulk of the work OUTSIDE the critical section
+    volatile uint32_t work = 0;
+    for (int i = 0; i < 5000; i++)
+    {
+      work += i;
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(120));
+  }
+  /* USER CODE END NormalHighPrioTask */
 }
 
 /* USER CODE END Application */

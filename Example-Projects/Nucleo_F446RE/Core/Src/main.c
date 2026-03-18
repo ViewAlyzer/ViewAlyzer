@@ -149,7 +149,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  SWO_Init(180000000, 2000000, VA_ITM_PORT); // CPU 180MHz, SWO 2MHz, port 0
+ // SWO_Init(180000000, 2000000, VA_ITM_PORT); // CPU 180MHz, SWO 2MHz, port 0
   HAL_Delay(2000);
   VA_Init(SystemCoreClock);
   VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_GRAPH);      // Task02: Sine value from sensor
