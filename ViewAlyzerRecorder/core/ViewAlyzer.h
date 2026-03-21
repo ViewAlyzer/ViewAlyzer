@@ -35,15 +35,44 @@ extern "C"
 #define VA_ENABLED 1         // Can be defined in your build system to 0 to disable ViewAlyzer
 #endif
 
+/* ── RTOS Selection ──────────────────────────────────────────────
+ * Define VA_RTOS_SELECT in your build system or here.
+ * 0 = No RTOS (bare-metal with user traces / ISR logging only)
+ * 1 = FreeRTOS
+ * 2 = Zephyr
+ * 3 = ThreadX  (reserved for future)
+ */
+#define VA_RTOS_NONE     0
+#define VA_RTOS_FREERTOS 1
+#define VA_RTOS_ZEPHYR   2
+#define VA_RTOS_THREADX  3
+
+/* Backward compatibility: honour the old VA_TRACE_FREERTOS knob */
+#if defined(VA_TRACE_FREERTOS) && (VA_TRACE_FREERTOS == 1) && !defined(VA_RTOS_SELECT)
+#define VA_RTOS_SELECT VA_RTOS_FREERTOS
+#endif
+
+#ifndef VA_RTOS_SELECT
+#define VA_RTOS_SELECT VA_RTOS_NONE
+#endif
+
+/* Convenience flag — true when any RTOS adapter is active */
+#define VA_HAS_RTOS (VA_RTOS_SELECT != VA_RTOS_NONE)
+
+/* Keep the old define working for existing FreeRTOS hook headers */
 #ifndef VA_TRACE_FREERTOS
-#define VA_TRACE_FREERTOS 1  // Can be defined in your build system to 0 to disable FreeRTOS tracing
+#if (VA_RTOS_SELECT == VA_RTOS_FREERTOS)
+#define VA_TRACE_FREERTOS 1
+#else
+#define VA_TRACE_FREERTOS 0
+#endif
 #endif
 
 #define ST_LINK_ITM        1u
 #define JLINK_RTT          2u
 #define CUSTOM_TRANSPORT   3u
 
-#define VA_TRANSPORT CUSTOM_TRANSPORT  // Select active transport backend
+#define VA_TRANSPORT ST_LINK_ITM  // Select active transport backend
 #define LOG_PENDSV 0             // Experimental, unused
 
 #define VA_ITM_PORT    1         // ITM stimulus port where logs are sent when using ST-LINK transport
@@ -88,13 +117,6 @@ extern "C"
 
 // User-provided send function signature for custom transport
 typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
-
-#if (VA_TRACE_FREERTOS == 1)
-#include "FreeRTOS.h"
-#include "task.h"
-#else
-#define TaskHandle_t uint32_t *
-#endif
 
 // --- Binary Event Type Codes ---
 #define VA_EVENT_TYPE_MASK        0x7F
@@ -183,14 +205,20 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     void VA_LogToggle(uint8_t id, bool state);
     void VA_LogUserEvent(uint8_t id, bool state);
 
-    // internal FreeRTOS hooks
-    void va_taskswitchedin(void);
-    void va_taskswitchedout(void);
-    void va_taskcreated(TaskHandle_t pxCreatedTask);
+    /* ── RTOS task/object hooks (generic void* handles) ──────────
+     * These are called by the RTOS adapter (FreeRTOS trace macros,
+     * Zephyr tracing callbacks, etc.).  The handle is opaque to the
+     * core — the adapter is responsible for passing the correct
+     * RTOS-native pointer.
+     */
+    void va_taskswitchedin(void *taskHandle);
+    void va_taskswitchedout(void *taskHandle);
+    void va_taskcreated(void *taskHandle, const char *name);
     bool va_isnit(void);
     
-    void va_logtasknotifygive(TaskHandle_t destTask, uint32_t value);
-    void va_logtasknotifytake(uint32_t value);
+    void va_logtasknotifygive(void *srcHandle, void *destHandle, uint32_t value);
+    void va_logtasknotifytake(void *taskHandle, uint32_t value);
+
     // Unified object tracking API
     void va_logQueueObjectCreate(void *queueObject, const char *name);
     void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint);
@@ -200,6 +228,32 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     void va_logQueueObjectBlocking(void *queueObject);
 
     extern volatile uint32_t notificationValue;
+
+    /* ── RTOS Adapter interface ──────────────────────────────────
+     * Each RTOS adapter must implement these.  The core calls them
+     * when it needs RTOS-specific information.
+     */
+#if VA_HAS_RTOS
+    /** Determine the sync-object type from a native RTOS handle.
+     *  FreeRTOS: inspects pcHead / ucQueueType in the Queue_t mirror.
+     *  Zephyr:   uses k_object_access or user-provided hint.
+     */
+    VA_QueueObjectType_t va_adapter_get_queue_object_type(void *handle);
+
+    /** Return stack usage in words for the given task handle.
+     *  FreeRTOS: calls uxTaskGetStackHighWaterMark.
+     *  Zephyr:   calls k_thread_stack_space_get.
+     */
+    uint32_t va_adapter_calculate_stack_usage(void *taskHandle);
+
+    /** Return total stack size in words for the given task handle. */
+    uint32_t va_adapter_get_total_stack_size(void *taskHandle);
+
+    /** Detect mutex contention and emit a contention packet if applicable.
+     *  Called from va_logQueueObjectBlocking().
+     */
+    void va_adapter_check_mutex_contention(void *queueObject, uint8_t queue_va_id);
+#endif /* VA_HAS_RTOS */
 
 #else
 // --- Empty stubs ---
@@ -216,16 +270,17 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_LogToggle(id, state) ((void)0)
 #define VA_LogUserEvent(id, state) ((void)0)
 
-#define va_taskswitchedin() ((void)0)
-#define va_taskswitchedout() ((void)0)
-#define va_taskcreated(pxCreatedTask) ((void)0)
-#define va_logtasknotifygive(destTask, value) ((void)0)
-#define va_logtasknotifytake(value) ((void)0)
+#define va_taskswitchedin(h) ((void)0)
+#define va_taskswitchedout(h) ((void)0)
+#define va_taskcreated(h, n) ((void)0)
+#define va_logtasknotifygive(s, d, v) ((void)0)
+#define va_logtasknotifytake(h, v) ((void)0)
 #define va_logQueueObjectCreate(queueObject, name) ((void)0)
 #define va_logQueueObjectCreateWithType(queueObject, typeHint) ((void)0)
 #define va_updateQueueObjectType(queueObject, typeHint) ((void)0)
 #define va_logQueueObjectGive(queueObject, timeout) ((void)0)
 #define va_logQueueObjectTake(queueObject, timeout) ((void)0)
+#define va_logQueueObjectBlocking(queueObject) ((void)0)
 
 bool va_isnit(void);
 

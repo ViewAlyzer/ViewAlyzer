@@ -1,6 +1,11 @@
 /**
  * @file ViewAlyzer.c
- * @brief ViewAlyzer Recorder Firmware - Implementation
+ * @brief ViewAlyzer Recorder Firmware - RTOS-Agnostic Core Engine
+ *
+ * This file contains the transport layer, timestamp engine, packet emission,
+ * and generic task/object map management.  All RTOS-specific logic (stack
+ * introspection, queue-type detection, mutex-holder queries) lives in the
+ * corresponding adapter file (VA_Adapter_FreeRTOS.c, VA_Adapter_Zephyr.c, …).
  *
  * Copyright (c) 2025 Free Radical Labs
  *
@@ -17,22 +22,17 @@
  */
 
 #include "ViewAlyzer.h"
-#if (VA_ENABLED == 1) && (VA_TRACE_FREERTOS == 1)
-#include "FreeRTOS.h"
-#include "list.h"
-#include "queue.h"
-#if defined(INCLUDE_xSemaphoreGetMutexHolder)
-#include "semphr.h"
-#endif
-#endif
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 #if (VA_ENABLED == 1)
 
+#include "VA_Internal.h"
 #include <string.h>
 #include <stdio.h>
+
 // Include RTT header only if needed
 #if VA_TRANSPORT_IS_JLINK
 #include "SEGGER_RTT.h"
@@ -49,19 +49,6 @@ extern "C"
     static VA_TransportSendFn s_user_send_fn = NULL;
 #endif
 
-#define VA_UNUSED(x) (void)(x)
-// Optional critical section helpers (preserve PRIMASK)
-#ifdef VA_ALLOWED_TO_DISABLE_INTERRUPTS
-#define VA_CS_ENTER()                        \
-    uint32_t __va_primask = __get_PRIMASK(); \
-    __disable_irq()
-
-#define VA_CS_EXIT() __set_PRIMASK(__va_primask)
-#else
-#define VA_CS_ENTER() ((void)0)
-#define VA_CS_EXIT() ((void)0)
-#endif
-
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8M_BASE__)
 #define DWT_ENABLED 1
     static volatile uint32_t g_dwt_overflow_count = 0;
@@ -73,47 +60,27 @@ extern "C"
 
 #ifndef DWT_NOT_AVAILABLE // Only compile the rest if DWT is enabled
 
+    /* ── Shared global state (exposed via VA_Internal.h) ────────── */
     volatile bool VA_IS_INIT = false;
 
     // --- Stream Sync Marker ---
-    // Unique byte sequence to signal the start of valid ViewAlyzer binary data.
-    // SEGGER RTT likes to send a banner on init.
-    // This helps host-side parsers skip over any transport banners/noise.
-    // Pattern: 'V' 'A' 'Z' 0x01 'S' 'Y' 'N' 'C' '0' '1' 0xAA 0x55
     static const uint8_t VA_SYNC_MARKER[] = {0x56, 0x41, 0x5A, 0x01, 0x53, 0x59, 0x4E, 0x43, 0x30, 0x31, 0xAA, 0x55};
 
-    // --- Task ID Mapping ---
-    typedef struct
-    {
-        TaskHandle_t handle;
-        uint8_t id;
-        char name[VA_MAX_TASK_NAME_LEN];
-        bool active;
-        TaskHandle_t last_notifier;
-        // Stack monitoring fields
-        void *pxStack;
-        void *pxEndOfStack;
-        uint32_t uxPriority;
-        uint32_t uxBasePriority;
-        uint32_t ulStackDepth;
-    } VA_TaskMapEntry_t;
-
-    static VA_TaskMapEntry_t taskMap[VA_MAX_TASKS];
-    static uint8_t next_task_id = 1;
+    // --- Task ID Mapping (RTOS-agnostic) ---
+    VA_TaskMapEntry_t taskMap[VA_MAX_TASKS];
+    uint8_t next_task_id = 1;
     static uint32_t _va_cpu_freq = 0;
 
-    // Hack to expose last notification value for trace macros
     volatile uint32_t notificationValue = 0;
 
     // Global variables to store task information during creation
-    // These are set by the hack in traceTASK_CREATE and used by va_taskcreated
     volatile void *g_task_pxStack = NULL;
     volatile void *g_task_pxEndOfStack = NULL;
     volatile uint32_t g_task_uxPriority = 0;
     volatile uint32_t g_task_uxBasePriority = 0;
     volatile uint32_t g_task_ulStackDepth = 0;
 
-    // User Function Tracking(Independent of FreeRTOS)
+    // User Function Tracking (Independent of RTOS)
     typedef struct
     {
         uint8_t id;
@@ -122,13 +89,23 @@ extern "C"
     } VA_UserFunctionMapEntry_t;
     static VA_UserFunctionMapEntry_t userFunctionMap[VA_MAX_TASKS];
 
+#if VA_HAS_RTOS
+    // --- Queue / sync-object map (RTOS-agnostic storage, adapter determines type) ---
+    VA_QueueObjectMapEntry_t queueObjectMap[VA_MAX_TASKS];
+    uint8_t next_queue_object_id = 1;
+#endif
+
+/* ================================================================
+ *  Transport layer
+ * ================================================================ */
+
 #if VA_TRANSPORT_IS_ST_LINK
 #define ITM_WaitReady(port) while (ITM->PORT[port].u32 == 0)
 
 static inline void ITM_SendU32(uint8_t port, uint32_t value)
 {
     ITM_WaitReady(port);
-    ITM->PORT[port].u32 = value; // Send 32-bit value
+    ITM->PORT[port].u32 = value;
 }
 static inline void ITM_SendU16(uint8_t port, uint16_t value)
 {
@@ -144,14 +121,13 @@ static void _va_send_bytes(const uint8_t *data, uint32_t length)
 {
     if (!VA_IS_INIT)
         return;
-    // NOTE: no CS here to avoid nested PRIMASK variables; callers are CS-wrapped.
     uint32_t i = 0;
     while (length >= 4)
     {
         uint32_t word = ((uint32_t)data[i + 3] << 24) |
                         ((uint32_t)data[i + 2] << 16) |
                         ((uint32_t)data[i + 1] << 8) |
-                        ((uint32_t)data[i + 0] << 0); // Assuming Little Endian CPU
+                        ((uint32_t)data[i + 0] << 0);
         ITM_SendU32(VA_ITM_PORT, word);
         i += 4;
         length -= 4;
@@ -165,17 +141,14 @@ static void _va_send_bytes(const uint8_t *data, uint32_t length)
 }
 
 #elif VA_TRANSPORT_IS_JLINK
-    // --- RTT Send Function ---
 static void _va_send_bytes(const uint8_t *data, uint32_t length)
 {
     if (!VA_IS_INIT)
         return;
-    // NOTE: no CS here to avoid nested PRIMASK variables; callers are CS-wrapped.
     SEGGER_RTT_Write(VA_RTT_CHANNEL, data, length);
 }
 
 #elif VA_TRANSPORT_IS_CUSTOM
-    // --- Custom Transport Send Function ---
 static void _va_send_bytes(const uint8_t *data, uint32_t length)
 {
     if (!VA_IS_INIT || s_user_send_fn == NULL)
@@ -187,25 +160,30 @@ static void _va_send_bytes(const uint8_t *data, uint32_t length)
 #error "VA_TRANSPORT must be ST_LINK_ITM, JLINK_RTT, or CUSTOM_TRANSPORT"
 #endif // VA_TRANSPORT
 
-// --- Packet Emission Layer ---
-// For ITM/RTT, packets are sent raw (sync-marker framing on host side).
-// For custom transport, each packet is COBS-encoded with a 0x00 delimiter
-// so the host can find frame boundaries on a raw byte stream.
+/* ================================================================
+ *  Packet emission layer
+ * ================================================================ */
 #if VA_TRANSPORT_IS_CUSTOM
-static void _va_emit_packet(const uint8_t *data, uint32_t length)
+void _va_emit_packet(const uint8_t *data, uint32_t length)
 {
     uint8_t cobs_buf[VA_MAX_PACKET_SIZE + (VA_MAX_PACKET_SIZE / 254) + 2];
     size_t encoded_len = va_cobs_encode(data, (size_t)length, cobs_buf);
     _va_send_bytes(cobs_buf, (uint32_t)encoded_len);
 }
 #else
-#define _va_emit_packet(data, length) _va_send_bytes(data, length)
+void _va_emit_packet(const uint8_t *data, uint32_t length)
+{
+    _va_send_bytes(data, length);
+}
 #endif
 
-static void _va_send_event_packet(uint8_t type_byte, uint8_t id, uint64_t timestamp)
+/* ================================================================
+ *  Packet construction helpers (non-static — adapters use these)
+ * ================================================================ */
+
+void _va_send_event_packet(uint8_t type_byte, uint8_t id, uint64_t timestamp)
 {
     uint8_t packet[10];
-
     packet[0] = type_byte;
     packet[1] = id;
     packet[2] = (uint8_t)(timestamp >> 0);
@@ -216,28 +194,25 @@ static void _va_send_event_packet(uint8_t type_byte, uint8_t id, uint64_t timest
     packet[7] = (uint8_t)(timestamp >> 40);
     packet[8] = (uint8_t)(timestamp >> 48);
     packet[9] = (uint8_t)(timestamp >> 56);
-
     _va_emit_packet(packet, 10);
 }
 
-static void _va_send_setup_packet(uint8_t setupCode, uint8_t id, const char *name)
+void _va_send_setup_packet(uint8_t setupCode, uint8_t id, const char *name)
 {
     uint8_t name_len = (uint8_t)strlen(name);
     if (name_len >= VA_MAX_TASK_NAME_LEN)
     {
         name_len = VA_MAX_TASK_NAME_LEN - 1;
     }
-
     uint8_t buf[3 + VA_MAX_TASK_NAME_LEN];
     buf[0] = setupCode;
     buf[1] = id;
     buf[2] = name_len;
     memcpy(&buf[3], name, name_len);
-
     _va_emit_packet(buf, 3 + name_len);
 }
 
-static void _va_send_user_setup_packet(uint8_t id, uint8_t type, const char *name)
+void _va_send_user_setup_packet(uint8_t id, uint8_t type, const char *name)
 {
     uint8_t name_len = (uint8_t)strlen(name);
     if (name_len >= VA_MAX_TASK_NAME_LEN)
@@ -250,11 +225,10 @@ static void _va_send_user_setup_packet(uint8_t id, uint8_t type, const char *nam
     buf[2] = type;
     buf[3] = name_len;
     memcpy(&buf[4], name, name_len);
-
     _va_emit_packet(buf, 4 + name_len);
 }
 
-static void _va_send_user_event_packet(uint8_t id, int32_t value, uint64_t timestamp)
+void _va_send_user_event_packet(uint8_t id, int32_t value, uint64_t timestamp)
 {
     uint8_t packet[14];
     packet[0] = VA_EVENT_USER_TRACE;
@@ -274,12 +248,11 @@ static void _va_send_user_event_packet(uint8_t id, int32_t value, uint64_t times
     _va_emit_packet(packet, 14);
 }
 
-static void _va_send_float_event_packet(uint8_t id, float value, uint64_t timestamp)
+void _va_send_float_event_packet(uint8_t id, float value, uint64_t timestamp)
 {
     uint8_t packet[14];
     uint32_t fbits;
     memcpy(&fbits, &value, sizeof(fbits));
-
     packet[0] = VA_EVENT_FLOAT_TRACE;
     packet[1] = id;
     packet[2] = (uint8_t)(timestamp >> 0);
@@ -297,7 +270,7 @@ static void _va_send_float_event_packet(uint8_t id, float value, uint64_t timest
     _va_emit_packet(packet, 14);
 }
 
-static void _va_send_user_toggle_event_packet(uint8_t id, VA_UserToggleState_t state, uint64_t timestamp)
+void _va_send_user_toggle_event_packet(uint8_t id, VA_UserToggleState_t state, uint64_t timestamp)
 {
     uint8_t packet[11];
     packet[0] = VA_EVENT_USER_TOGGLE;
@@ -311,66 +284,10 @@ static void _va_send_user_toggle_event_packet(uint8_t id, VA_UserToggleState_t s
     packet[8] = (uint8_t)(timestamp >> 48);
     packet[9] = (uint8_t)(timestamp >> 56);
     packet[10] = (uint8_t)(state);
-
     _va_emit_packet(packet, 11);
 }
 
-static inline uint64_t _va_get_timestamp(void)
-{
-    static uint32_t last_dwt_value = 0;
-    uint32_t high_part;
-    uint32_t low_part;
-    uint32_t temp_low;
-    uint32_t primask_state = __get_PRIMASK();
-    __disable_irq();
-
-    // Automatic overflow detection
-    uint32_t current_dwt = DWT->CYCCNT;
-    if (current_dwt < last_dwt_value)
-    {
-        g_dwt_overflow_count++;
-    }
-    last_dwt_value = current_dwt;
-    high_part = g_dwt_overflow_count;
-    low_part = current_dwt;
-    temp_low = DWT->CYCCNT;
-    if (temp_low < low_part)
-    {
-        high_part = g_dwt_overflow_count;
-        low_part = temp_low;
-    }
-    __set_PRIMASK(primask_state);
-    return (((uint64_t)high_part) << 32) | low_part;
-}
-
-/**
- * @brief Periodically poll the DWT cycle counter to catch rollovers that
- *        would otherwise be missed during long idle periods.
- *
- * At 170 MHz the 32-bit DWT->CYCCNT wraps every ~25.3 s.  If no ViewAlyzer
- * event is logged for longer than that, the overflow counter will miss
- * a wrap and all subsequent 64-bit timestamps will be off by 2^32 cycles.
- *
- * Call this from SysTick_Handler, a low-priority periodic task, or any
- * context that runs at least once every 10–20 seconds.
- * The function is very lightweight (reads DWT->CYCCNT, compares, returns).
- */
-void VA_TickOverflowCheck(void)
-{
-    if (!VA_IS_INIT) return;
-    (void)_va_get_timestamp();   // updates g_dwt_overflow_count as a side-effect
-}
-
-// TODO: Future improvement allow user to use Timers
-static void _va_enable_dwt_counter(void)
-{
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CYCCNT = 0;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-}
-
-#if (VA_TRACE_FREERTOS == 1)
-static void _va_send_notification_event_packet(uint8_t type_byte, uint8_t id, uint8_t other_id, uint32_t value, uint64_t timestamp)
+void _va_send_notification_event_packet(uint8_t type_byte, uint8_t id, uint8_t other_id, uint32_t value, uint64_t timestamp)
 {
     uint8_t packet[15];
     packet[0] = type_byte;
@@ -391,7 +308,7 @@ static void _va_send_notification_event_packet(uint8_t type_byte, uint8_t id, ui
     _va_emit_packet(packet, 15);
 }
 
-static void _va_send_mutex_contention_packet(uint8_t mutex_id, uint8_t waiting_task_id, uint8_t holder_task_id, uint64_t timestamp)
+void _va_send_mutex_contention_packet(uint8_t mutex_id, uint8_t waiting_task_id, uint8_t holder_task_id, uint64_t timestamp)
 {
     uint8_t packet[12];
     packet[0] = VA_EVENT_MUTEX_CONTENTION;
@@ -409,7 +326,7 @@ static void _va_send_mutex_contention_packet(uint8_t mutex_id, uint8_t waiting_t
     _va_emit_packet(packet, 12);
 }
 
-static void _va_send_task_create_packet(uint8_t id, uint64_t timestamp, uint32_t priority, uint32_t base_priority, uint32_t stack_size)
+void _va_send_task_create_packet(uint8_t id, uint64_t timestamp, uint32_t priority, uint32_t base_priority, uint32_t stack_size)
 {
     uint8_t packet[22];
     packet[0] = VA_EVENT_TASK_CREATE;
@@ -426,12 +343,10 @@ static void _va_send_task_create_packet(uint8_t id, uint64_t timestamp, uint32_t
     packet[11] = (uint8_t)(priority >> 8);
     packet[12] = (uint8_t)(priority >> 16);
     packet[13] = (uint8_t)(priority >> 24);
-    // Base Priority (4 bytes)
     packet[14] = (uint8_t)(base_priority >> 0);
     packet[15] = (uint8_t)(base_priority >> 8);
     packet[16] = (uint8_t)(base_priority >> 16);
     packet[17] = (uint8_t)(base_priority >> 24);
-    // Stack Size (4 bytes)
     packet[18] = (uint8_t)(stack_size >> 0);
     packet[19] = (uint8_t)(stack_size >> 8);
     packet[20] = (uint8_t)(stack_size >> 16);
@@ -439,13 +354,11 @@ static void _va_send_task_create_packet(uint8_t id, uint64_t timestamp, uint32_t
     _va_emit_packet(packet, 22);
 }
 
-// Send Stack Usage Packet: [Type(1B)] [ID(1B)] [Timestamp(8B)] [StackUsed(4B)] [StackTotal(4B)]
-static void _va_send_stack_usage_packet(uint8_t id, uint64_t timestamp, uint32_t stack_used, uint32_t stack_total)
+void _va_send_stack_usage_packet(uint8_t id, uint64_t timestamp, uint32_t stack_used, uint32_t stack_total)
 {
     uint8_t packet[18];
     packet[0] = VA_EVENT_TASK_STACK_USAGE;
     packet[1] = id;
-    // Timestamp (8 bytes)
     packet[2] = (uint8_t)(timestamp >> 0);
     packet[3] = (uint8_t)(timestamp >> 8);
     packet[4] = (uint8_t)(timestamp >> 16);
@@ -454,12 +367,10 @@ static void _va_send_stack_usage_packet(uint8_t id, uint64_t timestamp, uint32_t
     packet[7] = (uint8_t)(timestamp >> 40);
     packet[8] = (uint8_t)(timestamp >> 48);
     packet[9] = (uint8_t)(timestamp >> 56);
-    // Stack Used (4 bytes)
     packet[10] = (uint8_t)(stack_used >> 0);
     packet[11] = (uint8_t)(stack_used >> 8);
     packet[12] = (uint8_t)(stack_used >> 16);
     packet[13] = (uint8_t)(stack_used >> 24);
-    // Stack Total (4 bytes)
     packet[14] = (uint8_t)(stack_total >> 0);
     packet[15] = (uint8_t)(stack_total >> 8);
     packet[16] = (uint8_t)(stack_total >> 16);
@@ -467,7 +378,55 @@ static void _va_send_stack_usage_packet(uint8_t id, uint64_t timestamp, uint32_t
     _va_emit_packet(packet, 18);
 }
 
-static uint8_t _va_find_task_id(TaskHandle_t handle)
+/* ================================================================
+ *  Timestamp
+ * ================================================================ */
+
+uint64_t _va_get_timestamp(void)
+{
+    static uint32_t last_dwt_value = 0;
+    uint32_t high_part;
+    uint32_t low_part;
+    uint32_t temp_low;
+    uint32_t primask_state = __get_PRIMASK();
+    __disable_irq();
+
+    uint32_t current_dwt = DWT->CYCCNT;
+    if (current_dwt < last_dwt_value)
+    {
+        g_dwt_overflow_count++;
+    }
+    last_dwt_value = current_dwt;
+    high_part = g_dwt_overflow_count;
+    low_part = current_dwt;
+    temp_low = DWT->CYCCNT;
+    if (temp_low < low_part)
+    {
+        high_part = g_dwt_overflow_count;
+        low_part = temp_low;
+    }
+    __set_PRIMASK(primask_state);
+    return (((uint64_t)high_part) << 32) | low_part;
+}
+
+void VA_TickOverflowCheck(void)
+{
+    if (!VA_IS_INIT) return;
+    (void)_va_get_timestamp();
+}
+
+static void _va_enable_dwt_counter(void)
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+/* ================================================================
+ *  Generic task-map helpers
+ * ================================================================ */
+
+uint8_t _va_find_task_id(void *handle)
 {
     for (int i = 0; i < VA_MAX_TASKS; ++i)
     {
@@ -479,7 +438,7 @@ static uint8_t _va_find_task_id(TaskHandle_t handle)
     return 0;
 }
 
-static int _va_find_task_index(TaskHandle_t handle)
+int _va_find_task_index(void *handle)
 {
     for (int i = 0; i < VA_MAX_TASKS; ++i)
     {
@@ -490,33 +449,8 @@ static int _va_find_task_index(TaskHandle_t handle)
     }
     return -1;
 }
-static uint32_t _va_calculate_stack_usage(TaskHandle_t handle)
-{
-#if (INCLUDE_uxTaskGetStackHighWaterMark == 1)
-    uint32_t free_stack_words = uxTaskGetStackHighWaterMark(handle);
-    int idx = _va_find_task_index(handle);
-    if (idx >= 0 && taskMap[idx].ulStackDepth > 0)
-    {
-        uint32_t used_stack_words = taskMap[idx].ulStackDepth - free_stack_words;
-        return used_stack_words;
-    }
-    return free_stack_words;
-#else
-    return 0;
-#endif
-}
 
-static uint32_t _va_get_total_stack_size(TaskHandle_t handle)
-{
-    int idx = _va_find_task_index(handle);
-    if (idx >= 0)
-    {
-        return taskMap[idx].ulStackDepth;
-    }
-    return 0;
-}
-
-static uint8_t _va_assign_task_id(TaskHandle_t handle, const char *name)
+uint8_t _va_assign_task_id(void *handle, const char *name)
 {
     if (handle == NULL || name == NULL)
         return 0;
@@ -530,7 +464,7 @@ static uint8_t _va_assign_task_id(TaskHandle_t handle, const char *name)
         }
     }
     if (empty_slot == -1 || next_task_id == 0)
-        return 0; // No slots or ID wrapped
+        return 0;
 
     uint8_t new_id = next_task_id++;
     taskMap[empty_slot].active = true;
@@ -548,66 +482,221 @@ static uint8_t _va_assign_task_id(TaskHandle_t handle, const char *name)
     taskMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
 
     _va_send_setup_packet(VA_SETUP_TASK_MAP, new_id, taskMap[empty_slot].name);
-    return new_id; // Return the assigned ID
+    return new_id;
 }
-#endif
 
-void va_taskcreated(TaskHandle_t pxCreatedTask)
+/* ================================================================
+ *  Queue / sync-object map helpers
+ * ================================================================ */
+#if VA_HAS_RTOS
+
+const char *_va_get_object_type_name(VA_QueueObjectType_t type)
 {
-#if (VA_TRACE_FREERTOS == 1)
+    switch (type)
+    {
+    case VA_OBJECT_TYPE_QUEUE:           return "Queue";
+    case VA_OBJECT_TYPE_MUTEX:           return "Mutex";
+    case VA_OBJECT_TYPE_COUNTING_SEM:    return "CountingSem";
+    case VA_OBJECT_TYPE_BINARY_SEM:      return "BinarySem";
+    case VA_OBJECT_TYPE_RECURSIVE_MUTEX: return "RecursiveMutex";
+    default:                             return "Unknown";
+    }
+}
+
+uint8_t _va_get_setup_packet_type(VA_QueueObjectType_t type)
+{
+    switch (type)
+    {
+    case VA_OBJECT_TYPE_QUEUE:
+        return VA_SETUP_QUEUE_MAP;
+    case VA_OBJECT_TYPE_MUTEX:
+    case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
+        return VA_SETUP_MUTEX_MAP;
+    case VA_OBJECT_TYPE_COUNTING_SEM:
+    case VA_OBJECT_TYPE_BINARY_SEM:
+        return VA_SETUP_SEMAPHORE_MAP;
+    default:
+        return VA_SETUP_QUEUE_MAP;
+    }
+}
+
+uint8_t _va_find_queue_object_id(void *handle)
+{
+    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    {
+        if (queueObjectMap[i].active && queueObjectMap[i].handle == handle)
+        {
+            return queueObjectMap[i].id;
+        }
+    }
+    return 0;
+}
+
+VA_QueueObjectType_t _va_get_stored_queue_object_type(void *handle)
+{
+    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    {
+        if (queueObjectMap[i].active && queueObjectMap[i].handle == handle)
+        {
+            return queueObjectMap[i].type;
+        }
+    }
+    return va_adapter_get_queue_object_type(handle);
+}
+
+uint8_t _va_assign_queue_object_id(void *handle, const char *name, VA_QueueObjectType_t type)
+{
+    if (handle == NULL)
+        return 0;
+
+    int empty_slot = -1;
+    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    {
+        if (!queueObjectMap[i].active)
+        {
+            empty_slot = i;
+            break;
+        }
+    }
+    if (empty_slot == -1 || next_queue_object_id == 0)
+        return 0;
+
+    uint8_t new_id = next_queue_object_id++;
+    queueObjectMap[empty_slot].active = true;
+    queueObjectMap[empty_slot].handle = handle;
+    queueObjectMap[empty_slot].id = new_id;
+    queueObjectMap[empty_slot].type = type;
+
+    if (name && strlen(name) > 0)
+    {
+        strncpy(queueObjectMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
+    }
+    else
+    {
+        strncpy(queueObjectMap[empty_slot].name, _va_get_object_type_name(type), VA_MAX_TASK_NAME_LEN - 1);
+    }
+    queueObjectMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
+
+    _va_send_setup_packet(_va_get_setup_packet_type(type), new_id, queueObjectMap[empty_slot].name);
+    return new_id;
+}
+
+#endif /* VA_HAS_RTOS */
+
+/* ================================================================
+ *  User-function map (RTOS-independent)
+ * ================================================================ */
+
+static uint8_t _va_find_user_function_id(uint8_t function_id)
+{
+    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    {
+        if (userFunctionMap[i].active && userFunctionMap[i].id == function_id)
+        {
+            return userFunctionMap[i].id;
+        }
+    }
+    return 0;
+}
+
+static uint8_t _va_assign_user_function_id(uint8_t function_id, const char *name)
+{
+    if (name == NULL || function_id == 0)
+        return 0;
+
+    if (_va_find_user_function_id(function_id) != 0)
+        return function_id;
+
+    int empty_slot = -1;
+    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    {
+        if (!userFunctionMap[i].active)
+        {
+            empty_slot = i;
+            break;
+        }
+    }
+    if (empty_slot == -1)
+        return 0;
+
+    userFunctionMap[empty_slot].active = true;
+    userFunctionMap[empty_slot].id = function_id;
+    strncpy(userFunctionMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
+    userFunctionMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
+
+    _va_send_setup_packet(VA_SETUP_USER_FUNCTION_MAP, function_id, userFunctionMap[empty_slot].name);
+    return function_id;
+}
+
+/* ================================================================
+ *  RTOS task-event hooks (generic — delegate to adapter for OS specifics)
+ * ================================================================ */
+
+void va_taskcreated(void *taskHandle, const char *name)
+{
+#if VA_HAS_RTOS
     VA_CS_ENTER();
-    const char *name = pcTaskGetName(pxCreatedTask);
-    uint8_t assigned_id = _va_assign_task_id(pxCreatedTask, name ? name : "???");
+    uint8_t assigned_id = _va_assign_task_id(taskHandle, name ? name : "???");
     if (assigned_id > 0)
     {
         uint64_t timestamp = _va_get_timestamp();
-        _va_send_task_create_packet(assigned_id, timestamp, g_task_uxPriority, g_task_uxBasePriority, g_task_ulStackDepth);
+        _va_send_task_create_packet(assigned_id, timestamp,
+                                     g_task_uxPriority, g_task_uxBasePriority, g_task_ulStackDepth);
     }
     VA_CS_EXIT();
+#else
+    VA_UNUSED(taskHandle);
+    VA_UNUSED(name);
 #endif
 }
 
-void va_taskswitchedin(void)
+void va_taskswitchedin(void *taskHandle)
 {
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     VA_CS_ENTER();
-    TaskHandle_t handle = xTaskGetCurrentTaskHandle();
-    uint8_t id = _va_find_task_id(handle);
+    uint8_t id = _va_find_task_id(taskHandle);
     _va_send_event_packet(VA_EVENT_FLAG_START_END | VA_EVENT_TASK_SWITCH, id, _va_get_timestamp());
 
     if (id != 0)
     {
-        uint32_t stack_used = _va_calculate_stack_usage(handle);
-        uint32_t stack_total = _va_get_total_stack_size(handle);
+        uint32_t stack_used = va_adapter_calculate_stack_usage(taskHandle);
+        uint32_t stack_total = va_adapter_get_total_stack_size(taskHandle);
         if (stack_total > 0)
         {
             _va_send_stack_usage_packet(id, _va_get_timestamp(), stack_used, stack_total);
         }
     }
     VA_CS_EXIT();
+#else
+    VA_UNUSED(taskHandle);
 #endif
 }
 
-void va_taskswitchedout(void)
+void va_taskswitchedout(void *taskHandle)
 {
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     VA_CS_ENTER();
-    TaskHandle_t handle = xTaskGetCurrentTaskHandle();
-    uint8_t id = _va_find_task_id(handle);
+    uint8_t id = _va_find_task_id(taskHandle);
     _va_send_event_packet(VA_EVENT_TASK_SWITCH, id, _va_get_timestamp());
 
     if (id != 0)
     {
-        uint32_t stack_used = _va_calculate_stack_usage(handle);
-        uint32_t stack_total = _va_get_total_stack_size(handle);
+        uint32_t stack_used = va_adapter_calculate_stack_usage(taskHandle);
+        uint32_t stack_total = va_adapter_get_total_stack_size(taskHandle);
         if (stack_total > 0)
         {
             _va_send_stack_usage_packet(id, _va_get_timestamp(), stack_used, stack_total);
         }
     }
     VA_CS_EXIT();
+#else
+    VA_UNUSED(taskHandle);
 #endif
 }
+
+/* ================================================================
+ *  ISR logging (RTOS-independent)
+ * ================================================================ */
 
 void VA_LogISRStart(uint8_t isrId)
 {
@@ -635,9 +724,12 @@ void VA_LogISREnd(uint8_t isrId)
 
 bool va_isnit(void)
 {
-    // read-only; no CS needed
     return VA_IS_INIT;
 }
+
+/* ================================================================
+ *  User-trace / data logging (RTOS-independent)
+ * ================================================================ */
 
 void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type)
 {
@@ -651,7 +743,6 @@ void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type)
         _va_send_setup_packet(VA_SETUP_ISR_MAP, id, name);
     else
         _va_send_user_setup_packet(id, (uint8_t)type, name);
-
     VA_CS_EXIT();
 }
 
@@ -704,35 +795,41 @@ void VA_LogToggle(uint8_t id, bool state)
     VA_CS_EXIT();
 }
 
-void va_logtasknotifygive(TaskHandle_t dest, uint32_t value)
-{
-#if (VA_TRACE_FREERTOS == 1)
-    VA_CS_ENTER();
-    TaskHandle_t src = xTaskGetCurrentTaskHandle();
-    uint8_t src_id = _va_find_task_id(src);
-    uint8_t dest_id = _va_find_task_id(dest);
+/* ================================================================
+ *  Task notification hooks
+ * ================================================================ */
 
-    int idx = _va_find_task_index(dest);
+void va_logtasknotifygive(void *srcHandle, void *destHandle, uint32_t value)
+{
+#if VA_HAS_RTOS
+    VA_CS_ENTER();
+    uint8_t src_id = _va_find_task_id(srcHandle);
+    uint8_t dest_id = _va_find_task_id(destHandle);
+
+    int idx = _va_find_task_index(destHandle);
     if (idx >= 0)
     {
-        taskMap[idx].last_notifier = src;
+        taskMap[idx].last_notifier = srcHandle;
     }
 
     _va_send_notification_event_packet(VA_EVENT_FLAG_START_END | VA_EVENT_TASK_NOTIFY,
                                         src_id, dest_id, value, _va_get_timestamp());
     VA_CS_EXIT();
+#else
+    VA_UNUSED(srcHandle);
+    VA_UNUSED(destHandle);
+    VA_UNUSED(value);
 #endif
 }
 
-void va_logtasknotifytake(uint32_t value)
+void va_logtasknotifytake(void *taskHandle, uint32_t value)
 {
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     VA_CS_ENTER();
-    TaskHandle_t dest = xTaskGetCurrentTaskHandle();
-    uint8_t dest_id = _va_find_task_id(dest);
-    TaskHandle_t src = NULL;
+    uint8_t dest_id = _va_find_task_id(taskHandle);
+    void *src = NULL;
 
-    int idx = _va_find_task_index(dest);
+    int idx = _va_find_task_index(taskHandle);
     if (idx >= 0)
     {
         src = taskMap[idx].last_notifier;
@@ -744,236 +841,16 @@ void va_logtasknotifytake(uint32_t value)
     _va_send_notification_event_packet(VA_EVENT_TASK_NOTIFY,
                                         dest_id, src_id, value, _va_get_timestamp());
     VA_CS_EXIT();
-#endif
-}
-
-// --- Unified Queue Object Tracking ---
-#if (VA_TRACE_FREERTOS == 1)
-static uint8_t next_queue_object_id = 1;
-typedef struct
-{
-    void *handle;
-    uint8_t id;
-    char name[VA_MAX_TASK_NAME_LEN];
-    VA_QueueObjectType_t type;
-    bool active;
-} VA_QueueObjectMapEntry_t;
-static VA_QueueObjectMapEntry_t queueObjectMap[VA_MAX_TASKS];
-
-// Helper function to determine object type from FreeRTOS queue handle
-static VA_QueueObjectType_t _va_get_queue_object_type(void *handle)
-{
-    if (handle == NULL)
-        return VA_OBJECT_TYPE_QUEUE;
-
-    // Mirror the FreeRTOS Queue_t layout (see queue.c) to detect object type.
-    // FreeRTOS uses pcHead == NULL to indicate a mutex (queueQUEUE_IS_MUTEX)
-    typedef struct
-    {
-        int8_t *pcTail;
-        int8_t *pcReadFrom;
-    } QueuePointers_t;
-
-    typedef struct
-    {
-        TaskHandle_t xMutexHolder;
-        UBaseType_t uxRecursiveCallCount;
-    } SemaphoreData_t;
-
-    typedef struct QueueDefinitionMirror
-    {
-        int8_t *pcHead;  // uxQueueType alias - NULL for mutex
-        int8_t *pcWriteTo;
-        union
-        {
-            QueuePointers_t xQueue;
-            SemaphoreData_t xSemaphore;
-        } u;
-        List_t xTasksWaitingToSend;
-        List_t xTasksWaitingToReceive;
-        volatile UBaseType_t uxMessagesWaiting;
-        UBaseType_t uxLength;
-        UBaseType_t uxItemSize;
-        volatile int8_t cRxLock;
-        volatile int8_t cTxLock;
-#if ((configSUPPORT_STATIC_ALLOCATION == 1) && (configSUPPORT_DYNAMIC_ALLOCATION == 1))
-        uint8_t ucStaticallyAllocated;
-#endif
-#if (configUSE_QUEUE_SETS == 1)
-        struct QueueDefinitionMirror *pxQueueSetContainer;
-#endif
-#if (configUSE_TRACE_FACILITY == 1)
-        UBaseType_t uxQueueNumber;
-        uint8_t ucQueueType;
-#endif
-    } QueueDefinitionMirror;
-
-    QueueDefinitionMirror *pxQueue = (QueueDefinitionMirror *)handle;
-
-    // Check if it's a mutex first (pcHead == NULL means mutex)
-    if (pxQueue->pcHead == NULL)
-    {
-        return VA_OBJECT_TYPE_MUTEX;
-    }
-
-#if (configUSE_TRACE_FACILITY == 1)
-    // Use ucQueueType for other object types if available
-    return (VA_QueueObjectType_t)(pxQueue->ucQueueType);
 #else
-    // Fallback: check item size to distinguish semaphores from queues
-    if (pxQueue->uxItemSize == 0)
-    {
-        // It's a semaphore (binary or counting)
-        return VA_OBJECT_TYPE_BINARY_SEM;  // Default to binary
-    }
-    return VA_OBJECT_TYPE_QUEUE;
+    VA_UNUSED(taskHandle);
+    VA_UNUSED(value);
 #endif
 }
 
-static const char *_va_get_object_type_name(VA_QueueObjectType_t type)
-{
-    switch (type)
-    {
-    case VA_OBJECT_TYPE_QUEUE:
-        return "Queue";
-    case VA_OBJECT_TYPE_MUTEX:
-        return "Mutex";
-    case VA_OBJECT_TYPE_COUNTING_SEM:
-        return "CountingSem";
-    case VA_OBJECT_TYPE_BINARY_SEM:
-        return "BinarySem";
-    case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-        return "RecursiveMutex";
-    default:
-        return "Unknown";
-    }
-}
+/* ================================================================
+ *  Queue / sync-object event hooks
+ * ================================================================ */
 
-static uint8_t _va_get_setup_packet_type(VA_QueueObjectType_t type)
-{
-    switch (type)
-    {
-    case VA_OBJECT_TYPE_QUEUE:
-        return VA_SETUP_QUEUE_MAP;
-    case VA_OBJECT_TYPE_MUTEX:
-    case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-        return VA_SETUP_MUTEX_MAP;
-    case VA_OBJECT_TYPE_COUNTING_SEM:
-    case VA_OBJECT_TYPE_BINARY_SEM:
-        return VA_SETUP_SEMAPHORE_MAP;
-    default:
-        return VA_SETUP_QUEUE_MAP;
-    }
-}
-
-static uint8_t _va_find_queue_object_id(void *handle)
-{
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
-    {
-        if (queueObjectMap[i].active && queueObjectMap[i].handle == handle)
-        {
-            return queueObjectMap[i].id;
-        }
-    }
-    return 0;
-}
-
-// Get the stored type from the map (not from FreeRTOS structure)
-static VA_QueueObjectType_t _va_get_stored_queue_object_type(void *handle)
-{
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
-    {
-        if (queueObjectMap[i].active && queueObjectMap[i].handle == handle)
-        {
-            return queueObjectMap[i].type;
-        }
-    }
-    // Fallback to reading from FreeRTOS structure
-    return _va_get_queue_object_type(handle);
-}
-
-static uint8_t _va_assign_queue_object_id(void *handle, const char *name, VA_QueueObjectType_t type)
-{
-    if (handle == NULL)
-        return 0;
-
-    int empty_slot = -1;
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
-    {
-        if (!queueObjectMap[i].active)
-        {
-            empty_slot = i;
-            break;
-        }
-    }
-    if (empty_slot == -1 || next_queue_object_id == 0)
-        return 0;
-
-    uint8_t new_id = next_queue_object_id++;
-    queueObjectMap[empty_slot].active = true;
-    queueObjectMap[empty_slot].handle = handle;
-    queueObjectMap[empty_slot].id = new_id;
-    queueObjectMap[empty_slot].type = type;
-
-    // Use provided name or generate default name based on type
-    if (name && strlen(name) > 0)
-    {
-        strncpy(queueObjectMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
-    }
-    else
-    {
-        strncpy(queueObjectMap[empty_slot].name, _va_get_object_type_name(type), VA_MAX_TASK_NAME_LEN - 1);
-    }
-    queueObjectMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
-
-    _va_send_setup_packet(_va_get_setup_packet_type(type), new_id, queueObjectMap[empty_slot].name);
-    return new_id;
-}
-
-#endif
-
-static uint8_t _va_find_user_function_id(uint8_t function_id)
-{
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
-    {
-        if (userFunctionMap[i].active && userFunctionMap[i].id == function_id)
-        {
-            return userFunctionMap[i].id;
-        }
-    }
-    return 0;
-}
-
-static uint8_t _va_assign_user_function_id(uint8_t function_id, const char *name)
-{
-    if (name == NULL || function_id == 0)
-        return 0;
-
-    if (_va_find_user_function_id(function_id) != 0)
-        return function_id;
-
-    int empty_slot = -1;
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
-    {
-        if (!userFunctionMap[i].active)
-        {
-            empty_slot = i;
-            break;
-        }
-    }
-    if (empty_slot == -1)
-        return 0;
-
-    userFunctionMap[empty_slot].active = true;
-    userFunctionMap[empty_slot].id = function_id;
-    strncpy(userFunctionMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
-    userFunctionMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
-
-    _va_send_setup_packet(VA_SETUP_USER_FUNCTION_MAP, function_id, userFunctionMap[empty_slot].name);
-    return function_id;
-}
-
-// --- Unified Queue Object API ---
 void va_logQueueObjectCreate(void *queueObject, const char *name)
 {
     va_logQueueObjectCreateWithType(queueObject, name);
@@ -981,13 +858,12 @@ void va_logQueueObjectCreate(void *queueObject, const char *name)
 
 void va_updateQueueObjectType(void *queueObject, const char *typeHint)
 {
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     if (queueObject == NULL)
         return;
 
     VA_CS_ENTER();
 
-    // Find the existing entry (should have been created by traceQUEUE_CREATE)
     int idx = -1;
     for (int i = 0; i < VA_MAX_TASKS; ++i)
     {
@@ -1000,41 +876,27 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
 
     if (idx >= 0)
     {
-        // Determine the type from typeHint string (since FreeRTOS doesn't distinguish
-        // between queues and mutexes in ucQueueType field)
-        VA_QueueObjectType_t type = VA_OBJECT_TYPE_QUEUE; // default
+        VA_QueueObjectType_t type = VA_OBJECT_TYPE_QUEUE;
 
         if (typeHint != NULL)
         {
             if (strstr(typeHint, "RecMutex") != NULL || strstr(typeHint, "RecursiveMutex") != NULL)
-            {
                 type = VA_OBJECT_TYPE_RECURSIVE_MUTEX;
-            }
             else if (strstr(typeHint, "Mutex") != NULL)
-            {
                 type = VA_OBJECT_TYPE_MUTEX;
-            }
             else if (strstr(typeHint, "CountSem") != NULL || strstr(typeHint, "CountingSem") != NULL)
-            {
                 type = VA_OBJECT_TYPE_COUNTING_SEM;
-            }
             else if (strstr(typeHint, "BinSem") != NULL || strstr(typeHint, "BinarySem") != NULL)
-            {
                 type = VA_OBJECT_TYPE_BINARY_SEM;
-            }
-            // else remains VA_OBJECT_TYPE_QUEUE
         }
 
-        // Update the stored type
         queueObjectMap[idx].type = type;
 
-        // Generate a more descriptive name based on type hint and detected type
         char descriptiveName[VA_MAX_TASK_NAME_LEN];
         const char *finalName = typeHint;
 
         if (typeHint != NULL && strlen(typeHint) > 0)
         {
-            // Combine type hint with detected type for better identification
             switch (type)
             {
             case VA_OBJECT_TYPE_MUTEX:
@@ -1053,34 +915,33 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
             }
         }
 
-        // Update the name
         strncpy(queueObjectMap[idx].name, finalName, VA_MAX_TASK_NAME_LEN - 1);
         queueObjectMap[idx].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
 
-        // Re-send setup packet with correct type
         _va_send_setup_packet(_va_get_setup_packet_type(type), queueObjectMap[idx].id, queueObjectMap[idx].name);
     }
 
     VA_CS_EXIT();
+#else
+    VA_UNUSED(queueObject);
+    VA_UNUSED(typeHint);
 #endif
 }
 
 void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
 {
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     if (queueObject == NULL)
         return;
 
     VA_CS_ENTER();
-    VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
+    VA_QueueObjectType_t type = va_adapter_get_queue_object_type(queueObject);
 
-    // Generate a more descriptive name based on type hint and detected type
     char descriptiveName[VA_MAX_TASK_NAME_LEN];
     const char *finalName = typeHint;
 
     if (typeHint != NULL && strlen(typeHint) > 0)
     {
-        // Combine type hint with detected type for better identification
         switch (type)
         {
         case VA_OBJECT_TYPE_QUEUE:
@@ -1116,14 +977,16 @@ void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
 
     _va_assign_queue_object_id(queueObject, finalName, type);
     VA_CS_EXIT();
+#else
+    VA_UNUSED(queueObject);
+    VA_UNUSED(typeHint);
 #endif
 }
 
 void va_logQueueObjectGive(void *queueObject, uint32_t timeout)
 {
-    // use Timeout parameter for future use if needed
     VA_UNUSED(timeout);
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     if (queueObject == NULL)
         return;
 
@@ -1131,12 +994,10 @@ void va_logQueueObjectGive(void *queueObject, uint32_t timeout)
     uint8_t id = _va_find_queue_object_id(queueObject);
     if (id == 0)
     {
-        VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
+        VA_QueueObjectType_t type = va_adapter_get_queue_object_type(queueObject);
         id = _va_assign_queue_object_id(queueObject, NULL, type);
     }
 
-    // Determine the appropriate event type based on object type
-    // Use the stored type from the map (which may have been updated by va_updateQueueObjectType)
     uint8_t event_type;
     VA_QueueObjectType_t type = _va_get_stored_queue_object_type(queueObject);
     switch (type)
@@ -1162,21 +1023,19 @@ void va_logQueueObjectGive(void *queueObject, uint32_t timeout)
 
 void va_logQueueObjectTake(void *queueObject, uint32_t timeout)
 {
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     if (queueObject == NULL)
         return;
 
     VA_CS_ENTER();
-    (void)timeout;
+    VA_UNUSED(timeout);
     uint8_t id = _va_find_queue_object_id(queueObject);
     if (id == 0)
     {
-        VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
+        VA_QueueObjectType_t type = va_adapter_get_queue_object_type(queueObject);
         id = _va_assign_queue_object_id(queueObject, NULL, type);
     }
 
-    // Determine the appropriate event type based on object type
-    // Use the stored type from the map (which may have been updated by va_updateQueueObjectType)
     uint8_t event_type;
     VA_QueueObjectType_t type = _va_get_stored_queue_object_type(queueObject);
 
@@ -1185,8 +1044,6 @@ void va_logQueueObjectTake(void *queueObject, uint32_t timeout)
     case VA_OBJECT_TYPE_MUTEX:
     case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
         event_type = VA_EVENT_MUTEX;
-        // Note: Contention detection is now handled in va_logQueueObjectBlocking()
-        // which is called via traceBLOCKING_ON_QUEUE_RECEIVE before the task blocks
         break;
     case VA_OBJECT_TYPE_COUNTING_SEM:
     case VA_OBJECT_TYPE_BINARY_SEM:
@@ -1200,12 +1057,15 @@ void va_logQueueObjectTake(void *queueObject, uint32_t timeout)
 
     _va_send_event_packet(event_type, id, _va_get_timestamp());
     VA_CS_EXIT();
+#else
+    VA_UNUSED(queueObject);
+    VA_UNUSED(timeout);
 #endif
 }
 
 void va_logQueueObjectBlocking(void *queueObject)
 {
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     if (queueObject == NULL)
         return;
 
@@ -1214,49 +1074,27 @@ void va_logQueueObjectBlocking(void *queueObject)
     uint8_t id = _va_find_queue_object_id(queueObject);
     if (id == 0)
     {
-        VA_QueueObjectType_t type = _va_get_queue_object_type(queueObject);
+        VA_QueueObjectType_t type = va_adapter_get_queue_object_type(queueObject);
         id = _va_assign_queue_object_id(queueObject, NULL, type);
     }
 
-    // Get the stored type (which may have been updated by va_updateQueueObjectType)
     VA_QueueObjectType_t type = _va_get_stored_queue_object_type(queueObject);
 
-    // Only check for contention on mutexes
     if (type == VA_OBJECT_TYPE_MUTEX || type == VA_OBJECT_TYPE_RECURSIVE_MUTEX)
     {
-// Check if there's contention (another task holds it)
-#if ((defined(INCLUDE_xSemaphoreGetMutexHolder) && (INCLUDE_xSemaphoreGetMutexHolder == 1)) || \
-    (defined(INCLUDE_xQueueGetMutexHolder) && (INCLUDE_xQueueGetMutexHolder == 1)))
-        {
-            TaskHandle_t holder = NULL;
-#if (defined(INCLUDE_xSemaphoreGetMutexHolder) && (INCLUDE_xSemaphoreGetMutexHolder == 1))
-            holder = xSemaphoreGetMutexHolder((QueueHandle_t)queueObject);
-#else
-            holder = xQueueGetMutexHolder((QueueHandle_t)queueObject);
-#endif
-            if (holder != NULL)
-            {
-                // Mutex is currently held by another task - log contention
-                TaskHandle_t current = xTaskGetCurrentTaskHandle();
-                if (holder != current)
-                {
-                    uint8_t holder_id = _va_find_task_id(holder);
-                    uint8_t waiter_id = _va_find_task_id(current);
-                    if (holder_id != 0 && waiter_id != 0)
-                    {
-                        _va_send_mutex_contention_packet(id, waiter_id, holder_id, _va_get_timestamp());
-                    }
-                }
-            }
-        }
-#endif
+        va_adapter_check_mutex_contention(queueObject, id);
     }
 
     VA_CS_EXIT();
+#else
+    VA_UNUSED(queueObject);
 #endif
 }
 
-// --- User Function Event Logging ---
+/* ================================================================
+ *  User Function Event Logging
+ * ================================================================ */
+
 void VA_RegisterUserFunction(uint8_t id, const char *name)
 {
     VA_CS_ENTER();
@@ -1282,7 +1120,10 @@ void VA_LogUserEvent(uint8_t id, bool state)
     VA_CS_EXIT();
 }
 
-// --- Initialization ---
+/* ================================================================
+ *  Initialization
+ * ================================================================ */
+
 #if VA_TRANSPORT_IS_CUSTOM
 void VA_RegisterTransportSend(VA_TransportSendFn sendFn)
 {
@@ -1295,7 +1136,7 @@ void VA_Init(uint32_t cpu_freq)
     VA_CS_ENTER();
     _va_cpu_freq = cpu_freq;
 
-#if (VA_TRACE_FREERTOS == 1)
+#if VA_HAS_RTOS
     for (int i = 0; i < VA_MAX_TASKS; ++i)
     {
         taskMap[i].active = false;
@@ -1305,6 +1146,14 @@ void VA_Init(uint32_t cpu_freq)
     }
     next_task_id = 1;
     notificationValue = 0;
+
+    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    {
+        queueObjectMap[i].active = false;
+        queueObjectMap[i].handle = NULL;
+        queueObjectMap[i].id = 0;
+    }
+    next_queue_object_id = 1;
 #endif
 
     for (int i = 0; i < VA_MAX_TASKS; ++i)
@@ -1323,8 +1172,7 @@ void VA_Init(uint32_t cpu_freq)
 #elif VA_TRANSPORT_IS_JLINK
 #if (VA_CONFIGURE_RTT == 1)
         SEGGER_RTT_Init();
-    #if VA_RTT_BUFFER_SIZE > 0 
-        // Default to a dedicated buffer so RTT payloads survive host connect latency.
+    #if VA_RTT_BUFFER_SIZE > 0
         SEGGER_RTT_ConfigUpBuffer(VA_RTT_CHANNEL, "ViewAlyzer", s_va_rtt_up_buffer, sizeof(s_va_rtt_up_buffer), VA_RTT_MODE);
     #else
         SEGGER_RTT_ConfigUpBuffer(VA_RTT_CHANNEL, "ViewAlyzer", NULL, 0, VA_RTT_MODE);
@@ -1335,7 +1183,6 @@ void VA_Init(uint32_t cpu_freq)
 #endif // VA_TRANSPORT
     VA_IS_INIT = true;
 
-    // Emit sync marker first so host parsers can discard any preceding text/banners
     _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
     char info_buf[40];
@@ -1345,7 +1192,7 @@ void VA_Init(uint32_t cpu_freq)
 #if (LOG_PENDSV == 1)
     _va_send_setup_packet(VA_SETUP_ISR_MAP, VA_ISR_ID_PENDSV, "PendSV");
 #endif
-#if (VA_TRACE_FREERTOS == 0)
+#if (!VA_HAS_RTOS)
     _va_send_setup_packet(VA_SETUP_CONFIG_FLAGS, 0, "NO_RTOS");
 #endif
     VA_CS_EXIT();
@@ -1353,3 +1200,7 @@ void VA_Init(uint32_t cpu_freq)
 
 #endif // DWT_NOT_AVAILABLE check
 #endif // VA_ENABLED check
+
+#ifdef __cplusplus
+}
+#endif

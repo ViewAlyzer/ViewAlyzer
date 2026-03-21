@@ -1,18 +1,19 @@
 #ifndef ViewAlyzer_CONFIG_H
 #define ViewAlyzer_CONFIG_H
-#if defined(VA_ENABLED) && (VA_ENABLED == 1) && (VA_TRACE_FREERTOS == 1)
-// Suggesteed FreeRTOS Configs
+#if defined(VA_ENABLED) && (VA_ENABLED == 1) && \
+    ((defined(VA_TRACE_FREERTOS) && (VA_TRACE_FREERTOS == 1)) || \
+     (defined(VA_RTOS_SELECT) && (VA_RTOS_SELECT == 1)))
+// Suggested FreeRTOS Configs
 #define configRECORD_STACK_HIGH_ADDRESS 1
 
 // --- FreeRTOS Trace Macro Definitions ---
 // These macros hook into FreeRTOS to capture events using only REAL FreeRTOS trace macros
 
 // Task tracing - these are the actual FreeRTOS macros
-#define traceTASK_SWITCHED_IN() va_taskswitchedin()
-#define traceTASK_SWITCHED_OUT() va_taskswitchedout()
+#define traceTASK_SWITCHED_IN() va_taskswitchedin((void *)pxCurrentTCB)
+#define traceTASK_SWITCHED_OUT() va_taskswitchedout((void *)pxCurrentTCB)
 
 // Enhanced task creation macro that captures TCB information
-// This hack extracts information from the TCB before calling our profiler
 extern volatile void *g_task_pxStack;
 extern volatile void *g_task_pxEndOfStack;
 extern volatile uint32_t g_task_uxPriority;
@@ -35,14 +36,14 @@ extern volatile uint32_t g_task_ulStackDepth;
         g_task_pxEndOfStack = NULL;                                  \
         g_task_uxBasePriority = (pxNewTCB)->uxPriority;              \
         CALCULATE_STACK_DEPTH(pxNewTCB);                             \
-        va_taskcreated(pxNewTCB);                                    \
+        va_taskcreated((void *)(pxNewTCB), pcTaskGetName(pxNewTCB));  \
     } while (0)
 
 extern volatile uint32_t notificationValue;
-#define traceTASK_NOTIFY() (notificationValue = ulValue, va_logtasknotifygive(pxTCB, ulValue))
-#define traceTASK_NOTIFY_FROM_ISR() (notificationValue = ulValue, va_logtasknotifygive(pxTCB, ulValue))
-#define traceTASK_NOTIFY_GIVE_FROM_ISR() (notificationValue = pxTCB->ulNotifiedValue, va_logtasknotifygive(pxTCB, pxTCB->ulNotifiedValue))
-#define traceTASK_NOTIFY_TAKE() va_logtasknotifytake(pxCurrentTCB->ulNotifiedValue)
+#define traceTASK_NOTIFY() (notificationValue = ulValue, va_logtasknotifygive((void *)pxCurrentTCB, (void *)pxTCB, ulValue))
+#define traceTASK_NOTIFY_FROM_ISR() (notificationValue = ulValue, va_logtasknotifygive(NULL, (void *)pxTCB, ulValue))
+#define traceTASK_NOTIFY_GIVE_FROM_ISR() (notificationValue = pxTCB->ulNotifiedValue, va_logtasknotifygive(NULL, (void *)pxTCB, pxTCB->ulNotifiedValue))
+#define traceTASK_NOTIFY_TAKE() va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue)
 
 // Queue tracing - unified approach using generic queue creation macro
 // FreeRTOS uses queues as the underlying mechanism for mutexes, semaphores, and queues
