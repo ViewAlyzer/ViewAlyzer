@@ -75,7 +75,7 @@ extern volatile uint32_t  g_task_uxBasePriority;
 extern volatile uint32_t  g_task_ulStackDepth;
 
 #if (VA_RTOS_SELECT != VA_RTOS_NONE)
-extern VA_QueueObjectMapEntry_t queueObjectMap[VA_MAX_TASKS];
+extern VA_QueueObjectMapEntry_t queueObjectMap[VA_MAX_SYNC_OBJECTS];
 extern uint8_t                  next_queue_object_id;
 #endif
 

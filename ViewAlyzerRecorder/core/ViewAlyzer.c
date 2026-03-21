@@ -87,11 +87,11 @@ extern "C"
         char name[VA_MAX_TASK_NAME_LEN];
         bool active;
     } VA_UserFunctionMapEntry_t;
-    static VA_UserFunctionMapEntry_t userFunctionMap[VA_MAX_TASKS];
+    static VA_UserFunctionMapEntry_t userFunctionMap[VA_MAX_USER_FUNCTIONS];
 
 #if VA_HAS_RTOS
     // --- Queue / sync-object map (RTOS-agnostic storage, adapter determines type) ---
-    VA_QueueObjectMapEntry_t queueObjectMap[VA_MAX_TASKS];
+    VA_QueueObjectMapEntry_t queueObjectMap[VA_MAX_SYNC_OBJECTS];
     uint8_t next_queue_object_id = 1;
 #endif
 
@@ -522,7 +522,7 @@ uint8_t _va_get_setup_packet_type(VA_QueueObjectType_t type)
 
 uint8_t _va_find_queue_object_id(void *handle)
 {
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_SYNC_OBJECTS; ++i)
     {
         if (queueObjectMap[i].active && queueObjectMap[i].handle == handle)
         {
@@ -534,7 +534,7 @@ uint8_t _va_find_queue_object_id(void *handle)
 
 VA_QueueObjectType_t _va_get_stored_queue_object_type(void *handle)
 {
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_SYNC_OBJECTS; ++i)
     {
         if (queueObjectMap[i].active && queueObjectMap[i].handle == handle)
         {
@@ -550,7 +550,7 @@ uint8_t _va_assign_queue_object_id(void *handle, const char *name, VA_QueueObjec
         return 0;
 
     int empty_slot = -1;
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_SYNC_OBJECTS; ++i)
     {
         if (!queueObjectMap[i].active)
         {
@@ -589,7 +589,7 @@ uint8_t _va_assign_queue_object_id(void *handle, const char *name, VA_QueueObjec
 
 static uint8_t _va_find_user_function_id(uint8_t function_id)
 {
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
     {
         if (userFunctionMap[i].active && userFunctionMap[i].id == function_id)
         {
@@ -608,7 +608,7 @@ static uint8_t _va_assign_user_function_id(uint8_t function_id, const char *name
         return function_id;
 
     int empty_slot = -1;
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
     {
         if (!userFunctionMap[i].active)
         {
@@ -865,7 +865,7 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
     VA_CS_ENTER();
 
     int idx = -1;
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_SYNC_OBJECTS; ++i)
     {
         if (queueObjectMap[i].active && queueObjectMap[i].handle == queueObject)
         {
@@ -1147,7 +1147,7 @@ void VA_Init(uint32_t cpu_freq)
     next_task_id = 1;
     notificationValue = 0;
 
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_SYNC_OBJECTS; ++i)
     {
         queueObjectMap[i].active = false;
         queueObjectMap[i].handle = NULL;
@@ -1156,7 +1156,7 @@ void VA_Init(uint32_t cpu_freq)
     next_queue_object_id = 1;
 #endif
 
-    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
     {
         userFunctionMap[i].active = false;
         userFunctionMap[i].id = 0;
