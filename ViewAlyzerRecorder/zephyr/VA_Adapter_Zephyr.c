@@ -24,6 +24,36 @@
 #include <string.h>
 
 /* ================================================================
+ *  Timeout conversion helper — handles K_FOREVER safely
+ * ================================================================ */
+
+static inline uint32_t va_zephyr_timeout_to_ms(k_timeout_t timeout)
+{
+    if (K_TIMEOUT_EQ(timeout, K_FOREVER))
+        return 0xFFFFFFFFu;
+    if (K_TIMEOUT_EQ(timeout, K_NO_WAIT))
+        return 0;
+    return (uint32_t)k_ticks_to_ms_floor64(timeout.ticks);
+}
+
+static void va_zephyr_ensure_object_type(void *object,
+                     VA_QueueObjectType_t expected_type,
+                     const char *type_hint)
+{
+    if (object == NULL)
+        return;
+
+    if (_va_find_queue_object_id(object) == 0)
+    {
+        va_logQueueObjectCreateWithType(object, type_hint);
+        return;
+    }
+
+    if (_va_get_stored_queue_object_type(object) != expected_type)
+        va_updateQueueObjectType(object, type_hint);
+}
+
+/* ================================================================
  *  Adapter interface — queue object type
  * ================================================================ */
 
@@ -80,14 +110,18 @@ uint32_t va_adapter_get_total_stack_size(void *taskHandle)
 
 void va_adapter_check_mutex_contention(void *queueObject, uint8_t queue_va_id)
 {
-    /*
-     * Zephyr k_mutex has an owner field.  We could inspect it here,
-     * but the k_mutex struct layout is version-dependent.  For now
-     * this is a placeholder — contention detection can be added once
-     * the Zephyr object-type registration is fleshed out.
-     */
-    (void)queueObject;
-    (void)queue_va_id;
+    struct k_mutex *m = (struct k_mutex *)queueObject;
+    k_tid_t holder = m->owner;
+    if (holder != NULL)
+    {
+        k_tid_t waiter = k_current_get();
+        uint8_t waiting_id = _va_find_task_id((void *)waiter);
+        uint8_t holder_id  = _va_find_task_id((void *)holder);
+        if (waiting_id != 0 && holder_id != 0 && waiting_id != holder_id)
+        {
+            _va_send_mutex_contention_packet(queue_va_id, waiting_id, holder_id, _va_get_timestamp());
+        }
+    }
 }
 
 /* ================================================================
@@ -181,7 +215,7 @@ void sys_trace_k_mutex_init_user(struct k_mutex *mutex, int ret)
 {
     if (!va_isnit() || ret != 0)
         return;
-    va_logQueueObjectCreateWithType((void *)mutex, "Mutex");
+    va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
 }
 
 void sys_trace_k_mutex_lock_enter_user(struct k_mutex *mutex, k_timeout_t timeout)
@@ -192,16 +226,23 @@ void sys_trace_k_mutex_lock_enter_user(struct k_mutex *mutex, k_timeout_t timeou
 
 void sys_trace_k_mutex_lock_blocking_user(struct k_mutex *mutex, k_timeout_t timeout)
 {
+	ARG_UNUSED(timeout);
     if (!va_isnit())
+    {
         return;
+    }
+	va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
     va_logQueueObjectBlocking((void *)mutex);
 }
 
 void sys_trace_k_mutex_lock_exit_user(struct k_mutex *mutex, k_timeout_t timeout, int ret)
 {
     if (!va_isnit() || ret != 0)
+    {
         return;
-    va_logQueueObjectTake((void *)mutex, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+    }
+	va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
+    va_logQueueObjectTake((void *)mutex, va_zephyr_timeout_to_ms(timeout));
 }
 
 void sys_trace_k_mutex_unlock_enter_user(struct k_mutex *mutex)
@@ -212,7 +253,10 @@ void sys_trace_k_mutex_unlock_enter_user(struct k_mutex *mutex)
 void sys_trace_k_mutex_unlock_exit_user(struct k_mutex *mutex, int ret)
 {
     if (!va_isnit() || ret != 0)
+    {
         return;
+    }
+	va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
     va_logQueueObjectGive((void *)mutex, 0);
 }
 
@@ -222,15 +266,37 @@ void sys_trace_k_mutex_unlock_exit_user(struct k_mutex *mutex, int ret)
 
 void sys_trace_k_sem_init_user(struct k_sem *sem, int ret)
 {
+    VA_QueueObjectType_t expected_type;
+    const char *type_hint;
+
     if (!va_isnit() || ret != 0)
         return;
-    va_logQueueObjectCreateWithType((void *)sem, "Semaphore");
+    if (sem->limit <= 1)
+    {
+        expected_type = VA_OBJECT_TYPE_BINARY_SEM;
+        type_hint = "BinSem";
+    }
+    else
+    {
+        expected_type = VA_OBJECT_TYPE_COUNTING_SEM;
+        type_hint = "CountSem";
+    }
+
+    va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
 }
 
 void sys_trace_k_sem_give_enter_user(struct k_sem *sem)
 {
+    VA_QueueObjectType_t expected_type = (sem->limit <= 1)
+		? VA_OBJECT_TYPE_BINARY_SEM
+		: VA_OBJECT_TYPE_COUNTING_SEM;
+	const char *type_hint = (sem->limit <= 1) ? "BinSem" : "CountSem";
+
     if (!va_isnit())
+    {
         return;
+    }
+	va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
     va_logQueueObjectGive((void *)sem, 0);
 }
 
@@ -242,16 +308,33 @@ void sys_trace_k_sem_take_enter_user(struct k_sem *sem, k_timeout_t timeout)
 
 void sys_trace_k_sem_take_blocking_user(struct k_sem *sem, k_timeout_t timeout)
 {
+    VA_QueueObjectType_t expected_type = (sem->limit <= 1)
+        ? VA_OBJECT_TYPE_BINARY_SEM
+        : VA_OBJECT_TYPE_COUNTING_SEM;
+    const char *type_hint = (sem->limit <= 1) ? "BinSem" : "CountSem";
+
+    ARG_UNUSED(timeout);
     if (!va_isnit())
+    {
         return;
+    }
+    va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
     va_logQueueObjectBlocking((void *)sem);
 }
 
 void sys_trace_k_sem_take_exit_user(struct k_sem *sem, k_timeout_t timeout, int ret)
 {
+    VA_QueueObjectType_t expected_type = (sem->limit <= 1)
+		? VA_OBJECT_TYPE_BINARY_SEM
+		: VA_OBJECT_TYPE_COUNTING_SEM;
+	const char *type_hint = (sem->limit <= 1) ? "BinSem" : "CountSem";
+
     if (!va_isnit() || ret != 0)
+    {
         return;
-    va_logQueueObjectTake((void *)sem, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+    }
+	va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
+    va_logQueueObjectTake((void *)sem, va_zephyr_timeout_to_ms(timeout));
 }
 
 /* ================================================================
@@ -262,7 +345,7 @@ void sys_trace_k_msgq_init_user(struct k_msgq *msgq)
 {
     if (!va_isnit())
         return;
-    va_logQueueObjectCreateWithType((void *)msgq, "Queue");
+    va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
 }
 
 void sys_trace_k_msgq_put_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
@@ -273,16 +356,23 @@ void sys_trace_k_msgq_put_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
 
 void sys_trace_k_msgq_put_blocking_user(struct k_msgq *msgq, k_timeout_t timeout)
 {
+	ARG_UNUSED(timeout);
     if (!va_isnit())
+    {
         return;
+    }
+	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
     va_logQueueObjectBlocking((void *)msgq);
 }
 
 void sys_trace_k_msgq_put_exit_user(struct k_msgq *msgq, k_timeout_t timeout, int ret)
 {
     if (!va_isnit() || ret != 0)
+    {
         return;
-    va_logQueueObjectGive((void *)msgq, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+    }
+	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
+    va_logQueueObjectGive((void *)msgq, va_zephyr_timeout_to_ms(timeout));
 }
 
 void sys_trace_k_msgq_get_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
@@ -293,16 +383,23 @@ void sys_trace_k_msgq_get_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
 
 void sys_trace_k_msgq_get_blocking_user(struct k_msgq *msgq, k_timeout_t timeout)
 {
+	ARG_UNUSED(timeout);
     if (!va_isnit())
+    {
         return;
+    }
+	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
     va_logQueueObjectBlocking((void *)msgq);
 }
 
 void sys_trace_k_msgq_get_exit_user(struct k_msgq *msgq, k_timeout_t timeout, int ret)
 {
     if (!va_isnit() || ret != 0)
+    {
         return;
-    va_logQueueObjectTake((void *)msgq, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+    }
+	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
+    va_logQueueObjectTake((void *)msgq, va_zephyr_timeout_to_ms(timeout));
 }
 
 #endif /* VA_ENABLED && VA_RTOS_ZEPHYR */

@@ -79,7 +79,7 @@ extern "C"
 #define VA_RTT_CHANNEL 0        // RTT channel when using J-LINK RTT transport
 
 #define VA_MAX_TASKS          16  // RTOS task/thread slots (each ~40 bytes)
-#define VA_MAX_SYNC_OBJECTS   32  // Mutexes, semaphores, queues
+#define VA_MAX_SYNC_OBJECTS   64  // Mutexes, semaphores, queues, FIFOs
 #define VA_MAX_USER_FUNCTIONS 16  // User-profiled functions
 #define VA_MAX_TASK_NAME_LEN  16
 #define VA_ALLOWED_TO_DISABLE_INTERRUPTS 1 // Set to 1 to allow critical sections
@@ -137,6 +137,9 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_EVENT_MUTEX_CONTENTION 0x0C
 #define VA_EVENT_STRING_EVENT    0x0D
 #define VA_EVENT_FLOAT_TRACE      0x0E
+#define VA_EVENT_GPIO             0x0F
+#define VA_EVENT_COUNTER          0x10
+#define VA_EVENT_HEAP             0x11
 
 
 // --- Setup Message Codes ---
@@ -149,6 +152,9 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_SETUP_QUEUE_MAP         0x75
 #define VA_SETUP_USER_FUNCTION_MAP 0x76
 #define VA_SETUP_CONFIG_FLAGS      0x77
+#define VA_SETUP_GPIO_MAP          0x78
+#define VA_SETUP_HEAP_INFO         0x79
+#define VA_SETUP_OS_INFO           0x7A
 
     typedef enum
     {
@@ -206,6 +212,11 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     void VA_LogString(uint8_t id, const char *msg);
     void VA_LogToggle(uint8_t id, bool state);
     void VA_LogUserEvent(uint8_t id, bool state);
+    void VA_LogGPIO(uint8_t id, bool state);
+    void VA_LogCounter(uint8_t id, uint32_t value);
+    void VA_LogHeap(uint8_t id, uint32_t usedBytes);
+    void VA_RegisterGPIO(uint8_t id, const char *name);
+    void VA_RegisterHeap(uint8_t id, const char *name, uint32_t totalSize);
 
     /* ── RTOS task/object hooks (generic void* handles) ──────────
      * These are called by the RTOS adapter (FreeRTOS trace macros,
@@ -271,6 +282,11 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_LogString(id, msg) ((void)0)
 #define VA_LogToggle(id, state) ((void)0)
 #define VA_LogUserEvent(id, state) ((void)0)
+#define VA_LogGPIO(id, state) ((void)0)
+#define VA_LogCounter(id, value) ((void)0)
+#define VA_LogHeap(id, usedBytes) ((void)0)
+#define VA_RegisterGPIO(id, name) ((void)0)
+#define VA_RegisterHeap(id, name, totalSize) ((void)0)
 
 #define va_taskswitchedin(h) ((void)0)
 #define va_taskswitchedout(h) ((void)0)

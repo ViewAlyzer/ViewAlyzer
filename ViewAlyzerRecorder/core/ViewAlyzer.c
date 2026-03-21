@@ -378,6 +378,45 @@ void _va_send_stack_usage_packet(uint8_t id, uint64_t timestamp, uint32_t stack_
     _va_emit_packet(packet, 18);
 }
 
+void _va_send_data_event_packet(uint8_t type_byte, uint8_t id, uint32_t value, uint64_t timestamp)
+{
+    uint8_t packet[14];
+    packet[0] = type_byte;
+    packet[1] = id;
+    packet[2] = (uint8_t)(timestamp >> 0);
+    packet[3] = (uint8_t)(timestamp >> 8);
+    packet[4] = (uint8_t)(timestamp >> 16);
+    packet[5] = (uint8_t)(timestamp >> 24);
+    packet[6] = (uint8_t)(timestamp >> 32);
+    packet[7] = (uint8_t)(timestamp >> 40);
+    packet[8] = (uint8_t)(timestamp >> 48);
+    packet[9] = (uint8_t)(timestamp >> 56);
+    packet[10] = (uint8_t)(value >> 0);
+    packet[11] = (uint8_t)(value >> 8);
+    packet[12] = (uint8_t)(value >> 16);
+    packet[13] = (uint8_t)(value >> 24);
+    _va_emit_packet(packet, 14);
+}
+
+void _va_send_heap_setup_packet(uint8_t id, const char *name, uint32_t totalSize)
+{
+    uint8_t name_len = (uint8_t)strlen(name);
+    if (name_len >= VA_MAX_TASK_NAME_LEN)
+    {
+        name_len = VA_MAX_TASK_NAME_LEN - 1;
+    }
+    uint8_t buf[7 + VA_MAX_TASK_NAME_LEN];
+    buf[0] = VA_SETUP_HEAP_INFO;
+    buf[1] = id;
+    buf[2] = (uint8_t)(totalSize >> 0);
+    buf[3] = (uint8_t)(totalSize >> 8);
+    buf[4] = (uint8_t)(totalSize >> 16);
+    buf[5] = (uint8_t)(totalSize >> 24);
+    buf[6] = name_len;
+    memcpy(&buf[7], name, name_len);
+    _va_emit_packet(buf, 7 + name_len);
+}
+
 /* ================================================================
  *  Timestamp
  * ================================================================ */
@@ -795,6 +834,51 @@ void VA_LogToggle(uint8_t id, bool state)
     VA_CS_EXIT();
 }
 
+void VA_LogGPIO(uint8_t id, bool state)
+{
+    VA_CS_ENTER();
+    _va_send_data_event_packet(VA_EVENT_GPIO, id, (uint32_t)state, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
+void VA_LogCounter(uint8_t id, uint32_t value)
+{
+    VA_CS_ENTER();
+    _va_send_data_event_packet(VA_EVENT_COUNTER, id, value, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
+void VA_LogHeap(uint8_t id, uint32_t usedBytes)
+{
+    VA_CS_ENTER();
+    _va_send_data_event_packet(VA_EVENT_HEAP, id, usedBytes, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
+void VA_RegisterGPIO(uint8_t id, const char *name)
+{
+    VA_CS_ENTER();
+    if (id == 0 || name == NULL)
+    {
+        VA_CS_EXIT();
+        return;
+    }
+    _va_send_setup_packet(VA_SETUP_GPIO_MAP, id, name);
+    VA_CS_EXIT();
+}
+
+void VA_RegisterHeap(uint8_t id, const char *name, uint32_t totalSize)
+{
+    VA_CS_ENTER();
+    if (id == 0 || name == NULL)
+    {
+        VA_CS_EXIT();
+        return;
+    }
+    _va_send_heap_setup_packet(id, name, totalSize);
+    VA_CS_EXIT();
+}
+
 /* ================================================================
  *  Task notification hooks
  * ================================================================ */
@@ -888,6 +972,8 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
                 type = VA_OBJECT_TYPE_COUNTING_SEM;
             else if (strstr(typeHint, "BinSem") != NULL || strstr(typeHint, "BinarySem") != NULL)
                 type = VA_OBJECT_TYPE_BINARY_SEM;
+            else if (strstr(typeHint, "Semaphore") != NULL || strstr(typeHint, "Sem") != NULL)
+                type = VA_OBJECT_TYPE_COUNTING_SEM;
         }
 
         queueObjectMap[idx].type = type;
@@ -937,6 +1023,23 @@ void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
     VA_CS_ENTER();
     VA_QueueObjectType_t type = va_adapter_get_queue_object_type(queueObject);
 
+    /* If the adapter returned the default (QUEUE), infer from typeHint.
+     * This is essential for Zephyr where k_mutex/k_sem/k_msgq are separate
+     * types that can't be distinguished from a void* alone. */
+    if (type == VA_OBJECT_TYPE_QUEUE && typeHint != NULL)
+    {
+        if (strstr(typeHint, "RecMutex") != NULL || strstr(typeHint, "RecursiveMutex") != NULL)
+            type = VA_OBJECT_TYPE_RECURSIVE_MUTEX;
+        else if (strstr(typeHint, "Mutex") != NULL)
+            type = VA_OBJECT_TYPE_MUTEX;
+        else if (strstr(typeHint, "CountSem") != NULL || strstr(typeHint, "CountingSem") != NULL)
+            type = VA_OBJECT_TYPE_COUNTING_SEM;
+        else if (strstr(typeHint, "BinSem") != NULL || strstr(typeHint, "BinarySem") != NULL)
+            type = VA_OBJECT_TYPE_BINARY_SEM;
+        else if (strstr(typeHint, "Semaphore") != NULL || strstr(typeHint, "Sem") != NULL)
+            type = VA_OBJECT_TYPE_COUNTING_SEM;
+    }
+
     char descriptiveName[VA_MAX_TASK_NAME_LEN];
     const char *finalName = typeHint;
 
@@ -959,16 +1062,25 @@ void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
             }
             break;
         case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-            snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
-            finalName = descriptiveName;
+            if (strstr(typeHint, "RecMutex") == NULL && strstr(typeHint, "RecursiveMutex") == NULL)
+            {
+                snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
+                finalName = descriptiveName;
+            }
             break;
         case VA_OBJECT_TYPE_COUNTING_SEM:
-            snprintf(descriptiveName, sizeof(descriptiveName), "%s_CountSem", typeHint);
-            finalName = descriptiveName;
+            if (strstr(typeHint, "Sem") == NULL)
+            {
+                snprintf(descriptiveName, sizeof(descriptiveName), "%s_CountSem", typeHint);
+                finalName = descriptiveName;
+            }
             break;
         case VA_OBJECT_TYPE_BINARY_SEM:
-            snprintf(descriptiveName, sizeof(descriptiveName), "%s_BinSem", typeHint);
-            finalName = descriptiveName;
+            if (strstr(typeHint, "Sem") == NULL)
+            {
+                snprintf(descriptiveName, sizeof(descriptiveName), "%s_BinSem", typeHint);
+                finalName = descriptiveName;
+            }
             break;
         default:
             break;
@@ -1195,6 +1307,15 @@ void VA_Init(uint32_t cpu_freq)
 #if (!VA_HAS_RTOS)
     _va_send_setup_packet(VA_SETUP_CONFIG_FLAGS, 0, "NO_RTOS");
 #endif
+
+#if (VA_RTOS_SELECT == VA_RTOS_FREERTOS)
+    _va_send_setup_packet(VA_SETUP_OS_INFO, 0, "FreeRTOS");
+#elif (VA_RTOS_SELECT == VA_RTOS_ZEPHYR)
+    _va_send_setup_packet(VA_SETUP_OS_INFO, 0, "Zephyr");
+#else
+    _va_send_setup_packet(VA_SETUP_OS_INFO, 0, "BareMetal");
+#endif
+
     VA_CS_EXIT();
 }
 

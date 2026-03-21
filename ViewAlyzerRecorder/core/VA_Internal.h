@@ -93,6 +93,8 @@ void _va_send_notification_event_packet(uint8_t type_byte, uint8_t id, uint8_t o
 void _va_send_mutex_contention_packet(uint8_t mutex_id, uint8_t waiting_task_id, uint8_t holder_task_id, uint64_t timestamp);
 void _va_send_task_create_packet(uint8_t id, uint64_t timestamp, uint32_t priority, uint32_t base_priority, uint32_t stack_size);
 void _va_send_stack_usage_packet(uint8_t id, uint64_t timestamp, uint32_t stack_used, uint32_t stack_total);
+void _va_send_data_event_packet(uint8_t type_byte, uint8_t id, uint32_t value, uint64_t timestamp);
+void _va_send_heap_setup_packet(uint8_t id, const char *name, uint32_t totalSize);
 
 /* ── Generic map helpers (defined in ViewAlyzer.c) ──────────────── */
 uint8_t _va_find_task_id(void *handle);
