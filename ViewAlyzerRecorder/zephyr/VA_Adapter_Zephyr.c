@@ -173,4 +173,136 @@ void sys_trace_isr_exit_user(void)
     VA_LogISREnd((uint8_t)exception);
 }
 
+/* ================================================================
+ *  Mutex tracing overrides
+ * ================================================================ */
+
+void sys_trace_k_mutex_init_user(struct k_mutex *mutex, int ret)
+{
+    if (!va_isnit() || ret != 0)
+        return;
+    va_logQueueObjectCreateWithType((void *)mutex, "Mutex");
+}
+
+void sys_trace_k_mutex_lock_enter_user(struct k_mutex *mutex, k_timeout_t timeout)
+{
+    (void)mutex;
+    (void)timeout;
+}
+
+void sys_trace_k_mutex_lock_blocking_user(struct k_mutex *mutex, k_timeout_t timeout)
+{
+    if (!va_isnit())
+        return;
+    va_logQueueObjectBlocking((void *)mutex);
+}
+
+void sys_trace_k_mutex_lock_exit_user(struct k_mutex *mutex, k_timeout_t timeout, int ret)
+{
+    if (!va_isnit() || ret != 0)
+        return;
+    va_logQueueObjectTake((void *)mutex, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+}
+
+void sys_trace_k_mutex_unlock_enter_user(struct k_mutex *mutex)
+{
+    (void)mutex;
+}
+
+void sys_trace_k_mutex_unlock_exit_user(struct k_mutex *mutex, int ret)
+{
+    if (!va_isnit() || ret != 0)
+        return;
+    va_logQueueObjectGive((void *)mutex, 0);
+}
+
+/* ================================================================
+ *  Semaphore tracing overrides
+ * ================================================================ */
+
+void sys_trace_k_sem_init_user(struct k_sem *sem, int ret)
+{
+    if (!va_isnit() || ret != 0)
+        return;
+    va_logQueueObjectCreateWithType((void *)sem, "Semaphore");
+}
+
+void sys_trace_k_sem_give_enter_user(struct k_sem *sem)
+{
+    if (!va_isnit())
+        return;
+    va_logQueueObjectGive((void *)sem, 0);
+}
+
+void sys_trace_k_sem_take_enter_user(struct k_sem *sem, k_timeout_t timeout)
+{
+    (void)sem;
+    (void)timeout;
+}
+
+void sys_trace_k_sem_take_blocking_user(struct k_sem *sem, k_timeout_t timeout)
+{
+    if (!va_isnit())
+        return;
+    va_logQueueObjectBlocking((void *)sem);
+}
+
+void sys_trace_k_sem_take_exit_user(struct k_sem *sem, k_timeout_t timeout, int ret)
+{
+    if (!va_isnit() || ret != 0)
+        return;
+    va_logQueueObjectTake((void *)sem, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+}
+
+/* ================================================================
+ *  Message queue tracing overrides
+ * ================================================================ */
+
+void sys_trace_k_msgq_init_user(struct k_msgq *msgq)
+{
+    if (!va_isnit())
+        return;
+    va_logQueueObjectCreateWithType((void *)msgq, "Queue");
+}
+
+void sys_trace_k_msgq_put_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
+{
+    (void)msgq;
+    (void)timeout;
+}
+
+void sys_trace_k_msgq_put_blocking_user(struct k_msgq *msgq, k_timeout_t timeout)
+{
+    if (!va_isnit())
+        return;
+    va_logQueueObjectBlocking((void *)msgq);
+}
+
+void sys_trace_k_msgq_put_exit_user(struct k_msgq *msgq, k_timeout_t timeout, int ret)
+{
+    if (!va_isnit() || ret != 0)
+        return;
+    va_logQueueObjectGive((void *)msgq, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+}
+
+void sys_trace_k_msgq_get_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
+{
+    (void)msgq;
+    (void)timeout;
+}
+
+void sys_trace_k_msgq_get_blocking_user(struct k_msgq *msgq, k_timeout_t timeout)
+{
+    if (!va_isnit())
+        return;
+    va_logQueueObjectBlocking((void *)msgq);
+}
+
+void sys_trace_k_msgq_get_exit_user(struct k_msgq *msgq, k_timeout_t timeout, int ret)
+{
+    if (!va_isnit() || ret != 0)
+        return;
+    va_logQueueObjectTake((void *)msgq, (uint32_t)k_ticks_to_ms_floor64(timeout.ticks));
+}
+
 #endif /* VA_ENABLED && VA_RTOS_ZEPHYR */
