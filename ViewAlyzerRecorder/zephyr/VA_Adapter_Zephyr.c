@@ -10,6 +10,13 @@
  * Also overrides Zephyr's CONFIG_TRACING_USER weak callbacks to emit
  * native ViewAlyzer task-switch events through the core engine.
  *
+ * Mutex, semaphore, and message-queue tracing dispatch functions are
+ * defined directly here (not in stock tracing_user.c) so that users
+ * never need to modify Zephyr core files.  The companion header
+ * tracing_user.h (shipped alongside this file) wires the
+ * sys_port_trace macros to these functions.  Users just need:
+ *   zephyr_include_directories(BEFORE <path-to-VA-zephyr-dir>)
+ *
  * This file is compiled ONLY when VA_RTOS_SELECT == VA_RTOS_ZEPHYR.
  *
  * Copyright (c) 2025 Free Radical Labs
@@ -208,63 +215,57 @@ void sys_trace_isr_exit_user(void)
 }
 
 /* ================================================================
- *  Mutex tracing overrides
+ *  Mutex tracing dispatch (called from sys_port_trace macros)
  * ================================================================ */
 
-void sys_trace_k_mutex_init_user(struct k_mutex *mutex, int ret)
+void sys_trace_k_mutex_init(struct k_mutex *mutex, int ret)
 {
     if (!va_isnit() || ret != 0)
         return;
     va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
 }
 
-void sys_trace_k_mutex_lock_enter_user(struct k_mutex *mutex, k_timeout_t timeout)
+void sys_trace_k_mutex_lock_enter(struct k_mutex *mutex, k_timeout_t timeout)
 {
     (void)mutex;
     (void)timeout;
 }
 
-void sys_trace_k_mutex_lock_blocking_user(struct k_mutex *mutex, k_timeout_t timeout)
+void sys_trace_k_mutex_lock_blocking(struct k_mutex *mutex, k_timeout_t timeout)
 {
-	ARG_UNUSED(timeout);
+    ARG_UNUSED(timeout);
     if (!va_isnit())
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
+    va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
     va_logQueueObjectBlocking((void *)mutex);
 }
 
-void sys_trace_k_mutex_lock_exit_user(struct k_mutex *mutex, k_timeout_t timeout, int ret)
+void sys_trace_k_mutex_lock_exit(struct k_mutex *mutex, k_timeout_t timeout, int ret)
 {
     if (!va_isnit() || ret != 0)
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
+    va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
     va_logQueueObjectTake((void *)mutex, va_zephyr_timeout_to_ms(timeout));
 }
 
-void sys_trace_k_mutex_unlock_enter_user(struct k_mutex *mutex)
+void sys_trace_k_mutex_unlock_enter(struct k_mutex *mutex)
 {
     (void)mutex;
 }
 
-void sys_trace_k_mutex_unlock_exit_user(struct k_mutex *mutex, int ret)
+void sys_trace_k_mutex_unlock_exit(struct k_mutex *mutex, int ret)
 {
     if (!va_isnit() || ret != 0)
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
+    va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
     va_logQueueObjectGive((void *)mutex, 0);
 }
 
 /* ================================================================
- *  Semaphore tracing overrides
+ *  Semaphore tracing dispatch (called from sys_port_trace macros)
  * ================================================================ */
 
-void sys_trace_k_sem_init_user(struct k_sem *sem, int ret)
+void sys_trace_k_sem_init(struct k_sem *sem, int ret)
 {
     VA_QueueObjectType_t expected_type;
     const char *type_hint;
@@ -285,28 +286,26 @@ void sys_trace_k_sem_init_user(struct k_sem *sem, int ret)
     va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
 }
 
-void sys_trace_k_sem_give_enter_user(struct k_sem *sem)
+void sys_trace_k_sem_give_enter(struct k_sem *sem)
 {
     VA_QueueObjectType_t expected_type = (sem->limit <= 1)
-		? VA_OBJECT_TYPE_BINARY_SEM
-		: VA_OBJECT_TYPE_COUNTING_SEM;
-	const char *type_hint = (sem->limit <= 1) ? "BinSem" : "CountSem";
+        ? VA_OBJECT_TYPE_BINARY_SEM
+        : VA_OBJECT_TYPE_COUNTING_SEM;
+    const char *type_hint = (sem->limit <= 1) ? "BinSem" : "CountSem";
 
     if (!va_isnit())
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
+    va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
     va_logQueueObjectGive((void *)sem, 0);
 }
 
-void sys_trace_k_sem_take_enter_user(struct k_sem *sem, k_timeout_t timeout)
+void sys_trace_k_sem_take_enter(struct k_sem *sem, k_timeout_t timeout)
 {
     (void)sem;
     (void)timeout;
 }
 
-void sys_trace_k_sem_take_blocking_user(struct k_sem *sem, k_timeout_t timeout)
+void sys_trace_k_sem_take_blocking(struct k_sem *sem, k_timeout_t timeout)
 {
     VA_QueueObjectType_t expected_type = (sem->limit <= 1)
         ? VA_OBJECT_TYPE_BINARY_SEM
@@ -315,90 +314,78 @@ void sys_trace_k_sem_take_blocking_user(struct k_sem *sem, k_timeout_t timeout)
 
     ARG_UNUSED(timeout);
     if (!va_isnit())
-    {
         return;
-    }
     va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
     va_logQueueObjectBlocking((void *)sem);
 }
 
-void sys_trace_k_sem_take_exit_user(struct k_sem *sem, k_timeout_t timeout, int ret)
+void sys_trace_k_sem_take_exit(struct k_sem *sem, k_timeout_t timeout, int ret)
 {
     VA_QueueObjectType_t expected_type = (sem->limit <= 1)
-		? VA_OBJECT_TYPE_BINARY_SEM
-		: VA_OBJECT_TYPE_COUNTING_SEM;
-	const char *type_hint = (sem->limit <= 1) ? "BinSem" : "CountSem";
+        ? VA_OBJECT_TYPE_BINARY_SEM
+        : VA_OBJECT_TYPE_COUNTING_SEM;
+    const char *type_hint = (sem->limit <= 1) ? "BinSem" : "CountSem";
 
     if (!va_isnit() || ret != 0)
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
+    va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
     va_logQueueObjectTake((void *)sem, va_zephyr_timeout_to_ms(timeout));
 }
 
 /* ================================================================
- *  Message queue tracing overrides
+ *  Message queue tracing dispatch (called from sys_port_trace macros)
  * ================================================================ */
 
-void sys_trace_k_msgq_init_user(struct k_msgq *msgq)
+void sys_trace_k_msgq_init(struct k_msgq *msgq)
 {
     if (!va_isnit())
         return;
     va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
 }
 
-void sys_trace_k_msgq_put_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
+void sys_trace_k_msgq_put_enter(struct k_msgq *msgq, k_timeout_t timeout)
 {
     (void)msgq;
     (void)timeout;
 }
 
-void sys_trace_k_msgq_put_blocking_user(struct k_msgq *msgq, k_timeout_t timeout)
+void sys_trace_k_msgq_put_blocking(struct k_msgq *msgq, k_timeout_t timeout)
 {
-	ARG_UNUSED(timeout);
+    ARG_UNUSED(timeout);
     if (!va_isnit())
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
+    va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
     va_logQueueObjectBlocking((void *)msgq);
 }
 
-void sys_trace_k_msgq_put_exit_user(struct k_msgq *msgq, k_timeout_t timeout, int ret)
+void sys_trace_k_msgq_put_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret)
 {
     if (!va_isnit() || ret != 0)
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
+    va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
     va_logQueueObjectGive((void *)msgq, va_zephyr_timeout_to_ms(timeout));
 }
 
-void sys_trace_k_msgq_get_enter_user(struct k_msgq *msgq, k_timeout_t timeout)
+void sys_trace_k_msgq_get_enter(struct k_msgq *msgq, k_timeout_t timeout)
 {
     (void)msgq;
     (void)timeout;
 }
 
-void sys_trace_k_msgq_get_blocking_user(struct k_msgq *msgq, k_timeout_t timeout)
+void sys_trace_k_msgq_get_blocking(struct k_msgq *msgq, k_timeout_t timeout)
 {
-	ARG_UNUSED(timeout);
+    ARG_UNUSED(timeout);
     if (!va_isnit())
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
+    va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
     va_logQueueObjectBlocking((void *)msgq);
 }
 
-void sys_trace_k_msgq_get_exit_user(struct k_msgq *msgq, k_timeout_t timeout, int ret)
+void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret)
 {
     if (!va_isnit() || ret != 0)
-    {
         return;
-    }
-	va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
+    va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
     va_logQueueObjectTake((void *)msgq, va_zephyr_timeout_to_ms(timeout));
 }
 
