@@ -696,6 +696,7 @@ void va_taskswitchedin(void *taskHandle)
     uint8_t id = _va_find_task_id(taskHandle);
     _va_send_event_packet(VA_EVENT_FLAG_START_END | VA_EVENT_TASK_SWITCH, id, _va_get_timestamp());
 
+#if VA_CAPTURE_STACK_USAGE
     if (id != 0)
     {
         uint32_t stack_used = va_adapter_calculate_stack_usage(taskHandle);
@@ -705,6 +706,7 @@ void va_taskswitchedin(void *taskHandle)
             _va_send_stack_usage_packet(id, _va_get_timestamp(), stack_used, stack_total);
         }
     }
+#endif
     VA_CS_EXIT();
 #else
     VA_UNUSED(taskHandle);
@@ -718,6 +720,7 @@ void va_taskswitchedout(void *taskHandle)
     uint8_t id = _va_find_task_id(taskHandle);
     _va_send_event_packet(VA_EVENT_TASK_SWITCH, id, _va_get_timestamp());
 
+#if VA_CAPTURE_STACK_USAGE
     if (id != 0)
     {
         uint32_t stack_used = va_adapter_calculate_stack_usage(taskHandle);
@@ -727,6 +730,7 @@ void va_taskswitchedout(void *taskHandle)
             _va_send_stack_usage_packet(id, _va_get_timestamp(), stack_used, stack_total);
         }
     }
+#endif
     VA_CS_EXIT();
 #else
     VA_UNUSED(taskHandle);

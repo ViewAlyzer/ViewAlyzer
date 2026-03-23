@@ -98,6 +98,10 @@ extern "C"
 #define VA_ALLOWED_TO_DISABLE_INTERRUPTS 1 // Set to 1 to allow critical sections
 #endif
 
+#ifndef VA_CAPTURE_STACK_USAGE
+#define VA_CAPTURE_STACK_USAGE 1 // Set to 0 to disable stack usage packets and queries
+#endif
+
 // If using J-LINK RTT transport, configure RTT here by setting VA_CONFIGURE_RTT to 1
 // otherwise set to 0 to skip RTT configuration and user is expected to do it elsewhere
 #define VA_CONFIGURE_RTT       1                        //set to 0 to use your own init
@@ -270,10 +274,13 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     /** Return stack usage in words for the given task handle.
      *  FreeRTOS: calls uxTaskGetStackHighWaterMark.
      *  Zephyr:   calls k_thread_stack_space_get.
+     *  Only used when VA_CAPTURE_STACK_USAGE is enabled.
      */
     uint32_t va_adapter_calculate_stack_usage(void *taskHandle);
 
-    /** Return total stack size in words for the given task handle. */
+    /** Return total stack size in words for the given task handle.
+     *  Only used when VA_CAPTURE_STACK_USAGE is enabled.
+     */
     uint32_t va_adapter_get_total_stack_size(void *taskHandle);
 
     /** Detect mutex contention and emit a contention packet if applicable.
