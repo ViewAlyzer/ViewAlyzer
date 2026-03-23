@@ -1298,7 +1298,7 @@ void VA_Init(uint32_t cpu_freq)
     _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
     char info_buf[40];
-    snprintf(info_buf, sizeof(info_buf), "CLK:%lu", _va_cpu_freq);
+    snprintf(info_buf, sizeof(info_buf), "CLK:%u", _va_cpu_freq);
     _va_send_setup_packet(VA_SETUP_INFO, 0, info_buf);
     _va_send_setup_packet(VA_SETUP_ISR_MAP, VA_ISR_ID_SYSTICK, "SysTick");
 #if (LOG_PENDSV == 1)

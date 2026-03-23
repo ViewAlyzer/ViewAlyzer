@@ -1,0 +1,76 @@
+menuconfig VIEWALYZER
+	bool "ViewAlyzer Trace Recorder"
+	default n
+	select TRACING
+	select THREAD_MONITOR
+	select THREAD_STACK_INFO
+	select THREAD_NAME
+	help
+	  Enable the ViewAlyzer binary trace recorder for Zephyr.
+
+if VIEWALYZER
+
+config VIEWALYZER_TRACE_THREADS
+	bool "Trace thread switches"
+	default y
+	select TRACING_THREAD
+
+config VIEWALYZER_TRACE_ISRS
+	bool "Trace ISRs"
+	default y
+	select TRACING_ISR
+
+config VIEWALYZER_TRACE_MUTEXES
+	bool "Trace mutexes"
+	default y
+	select TRACING_MUTEX
+
+config VIEWALYZER_TRACE_SEMAPHORES
+	bool "Trace semaphores"
+	default y
+	select TRACING_SEMAPHORE
+
+config VIEWALYZER_TRACE_MESSAGE_QUEUES
+	bool "Trace message queues"
+	default y
+	select TRACING_MESSAGE_QUEUE
+
+config VIEWALYZER_STACK_USAGE
+	bool "Capture thread stack usage"
+	default y
+	select INIT_STACKS
+
+config VIEWALYZER_MAX_SYNC_OBJECTS
+	int "Max sync object slots"
+	default 64
+	help
+	  Number of mutex, semaphore, and queue objects the recorder can track.
+
+config VIEWALYZER_MAX_TASKS
+	int "Max task slots"
+	default 16
+	help
+	  Number of RTOS task or thread entries the recorder can track.
+
+config VIEWALYZER_MAX_USER_FUNCTIONS
+	int "Max user function slots"
+	default 16
+	help
+	  Number of user-profiled function IDs the recorder can store.
+
+config VIEWALYZER_MAX_TASK_NAME_LEN
+	int "Max task name length"
+	default 16
+	range 4 255
+	help
+	  Maximum stored length for task, object, and user-function names.
+
+config VIEWALYZER_ALLOW_DISABLE_INTERRUPTS
+	bool "Allow interrupt masking in recorder critical sections"
+	default y
+	help
+	  Allow the recorder to mask interrupts around short internal critical
+	  sections. Disable this if the target environment must never disable
+	  interrupts from inside the recorder.
+
+endif

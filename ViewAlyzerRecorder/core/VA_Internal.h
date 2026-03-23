@@ -25,7 +25,7 @@ extern "C" {
 #if (VA_ENABLED == 1)
 
 /* ── Critical-section helpers (preserve PRIMASK) ───────────────── */
-#ifdef VA_ALLOWED_TO_DISABLE_INTERRUPTS
+#if VA_ALLOWED_TO_DISABLE_INTERRUPTS
 #define VA_CS_ENTER()                        \
     uint32_t __va_primask = __get_PRIMASK(); \
     __disable_irq()

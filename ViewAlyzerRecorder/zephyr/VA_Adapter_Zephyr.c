@@ -173,6 +173,7 @@ void VA_Zephyr_RegisterExistingThreads(void)
  *  Zephyr tracing weak-function overrides
  * ================================================================ */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_THREADS)
 void sys_trace_thread_create_user(struct k_thread *thread)
 {
     if (!va_isnit())
@@ -197,7 +198,9 @@ void sys_trace_thread_switched_out_user(void)
     k_tid_t cur = k_current_get();
     va_taskswitchedout((void *)cur);
 }
+#endif
 
+#if defined(CONFIG_VIEWALYZER_TRACE_ISRS)
 void sys_trace_isr_enter_user(void)
 {
     if (!va_isnit())
@@ -213,11 +216,13 @@ void sys_trace_isr_exit_user(void)
     uint32_t exception = __get_IPSR() & 0xFFu;
     VA_LogISREnd((uint8_t)exception);
 }
+#endif
 
 /* ================================================================
  *  Mutex tracing dispatch (called from sys_port_trace macros)
  * ================================================================ */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_MUTEXES)
 void sys_trace_k_mutex_init(struct k_mutex *mutex, int ret)
 {
     if (!va_isnit() || ret != 0)
@@ -260,11 +265,13 @@ void sys_trace_k_mutex_unlock_exit(struct k_mutex *mutex, int ret)
     va_zephyr_ensure_object_type((void *)mutex, VA_OBJECT_TYPE_MUTEX, "Mutex");
     va_logQueueObjectGive((void *)mutex, 0);
 }
+#endif
 
 /* ================================================================
  *  Semaphore tracing dispatch (called from sys_port_trace macros)
  * ================================================================ */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_SEMAPHORES)
 void sys_trace_k_sem_init(struct k_sem *sem, int ret)
 {
     VA_QueueObjectType_t expected_type;
@@ -331,11 +338,13 @@ void sys_trace_k_sem_take_exit(struct k_sem *sem, k_timeout_t timeout, int ret)
     va_zephyr_ensure_object_type((void *)sem, expected_type, type_hint);
     va_logQueueObjectTake((void *)sem, va_zephyr_timeout_to_ms(timeout));
 }
+#endif
 
 /* ================================================================
  *  Message queue tracing dispatch (called from sys_port_trace macros)
  * ================================================================ */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_MESSAGE_QUEUES)
 void sys_trace_k_msgq_init(struct k_msgq *msgq)
 {
     if (!va_isnit())
@@ -388,5 +397,6 @@ void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
     va_zephyr_ensure_object_type((void *)msgq, VA_OBJECT_TYPE_QUEUE, "Queue");
     va_logQueueObjectTake((void *)msgq, va_zephyr_timeout_to_ms(timeout));
 }
+#endif
 
 #endif /* VA_ENABLED && VA_RTOS_ZEPHYR */

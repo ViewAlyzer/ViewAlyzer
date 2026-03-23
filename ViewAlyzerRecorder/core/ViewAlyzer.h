@@ -78,11 +78,25 @@ extern "C"
 #define VA_ITM_PORT    1         // ITM stimulus port where logs are sent when using ST-LINK transport
 #define VA_RTT_CHANNEL 0        // RTT channel when using J-LINK RTT transport
 
+#ifndef VA_MAX_TASKS
 #define VA_MAX_TASKS          16  // RTOS task/thread slots (each ~40 bytes)
+#endif
+
+#ifndef VA_MAX_SYNC_OBJECTS
 #define VA_MAX_SYNC_OBJECTS   64  // Mutexes, semaphores, queues, FIFOs
+#endif
+
+#ifndef VA_MAX_USER_FUNCTIONS
 #define VA_MAX_USER_FUNCTIONS 16  // User-profiled functions
+#endif
+
+#ifndef VA_MAX_TASK_NAME_LEN
 #define VA_MAX_TASK_NAME_LEN  16
+#endif
+
+#ifndef VA_ALLOWED_TO_DISABLE_INTERRUPTS
 #define VA_ALLOWED_TO_DISABLE_INTERRUPTS 1 // Set to 1 to allow critical sections
+#endif
 
 // If using J-LINK RTT transport, configure RTT here by setting VA_CONFIGURE_RTT to 1
 // otherwise set to 0 to skip RTT configuration and user is expected to do it elsewhere
