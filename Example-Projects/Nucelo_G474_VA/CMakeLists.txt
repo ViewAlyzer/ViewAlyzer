@@ -12,7 +12,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
-add_definitions(-DVA_ENABLED=1 -DVA_TRACE_FREERTOS=1)
+add_definitions(-DVA_ENABLED=1 -DVA_RTOS_SELECT=1)
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -54,6 +54,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     ${VIEWALYZER_RECORDER_DIR}/core/ViewAlyzer.c
     ${VIEWALYZER_RECORDER_DIR}/core/viewalyzer_cobs.c
+    ${VIEWALYZER_RECORDER_DIR}/freertos/VA_Adapter_FreeRTOS.c
 )
 
 # Add include paths

@@ -36,7 +36,7 @@
 /* USER CODE BEGIN PD */
 
 /* Set to 1 for normal FreeRTOS mode, 0 for bare-metal trace-only mode */
-#define USE_FREERTOS  0
+#define USE_FREERTOS  1
 
 /* USER CODE END PD */
 
