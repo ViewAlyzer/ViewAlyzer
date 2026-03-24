@@ -24,12 +24,14 @@ if(CONFIG_VIEWALYZER)
     zephyr_compile_definitions(VA_ALLOWED_TO_DISABLE_INTERRUPTS=0)
   endif()
 
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:-include${VIEWALYZER_MODULE_DIR}/zephyr/tracing_user.h>)
+
   zephyr_include_directories(
     ${VIEWALYZER_MODULE_DIR}/core
     ${VIEWALYZER_MODULE_DIR}/zephyr
   )
 
-  zephyr_include_directories(BEFORE ${VIEWALYZER_MODULE_DIR}/zephyr)
+  include_directories(BEFORE ${VIEWALYZER_MODULE_DIR}/zephyr)
 
   zephyr_library_include_directories(
     ${VIEWALYZER_MODULE_DIR}/core
