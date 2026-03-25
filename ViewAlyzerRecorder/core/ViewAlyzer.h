@@ -72,11 +72,15 @@ extern "C"
 #define JLINK_RTT          2u
 #define CUSTOM_TRANSPORT   3u
 
+#ifndef VA_TRANSPORT
 #define VA_TRANSPORT ST_LINK_ITM  // Select active transport backend
+#endif
 #define LOG_PENDSV 0             // Experimental, unused
 
 #define VA_ITM_PORT    1         // ITM stimulus port where logs are sent when using ST-LINK transport
+#ifndef VA_RTT_CHANNEL
 #define VA_RTT_CHANNEL 0        // RTT channel when using J-LINK RTT transport
+#endif
 
 #ifndef VA_MAX_TASKS
 #define VA_MAX_TASKS          16  // RTOS task/thread slots (each ~40 bytes)
@@ -104,9 +108,15 @@ extern "C"
 
 // If using J-LINK RTT transport, configure RTT here by setting VA_CONFIGURE_RTT to 1
 // otherwise set to 0 to skip RTT configuration and user is expected to do it elsewhere
+#ifndef VA_CONFIGURE_RTT
 #define VA_CONFIGURE_RTT       1                        //set to 0 to use your own init
+#endif
+#ifndef VA_RTT_BUFFER_SIZE
 #define VA_RTT_BUFFER_SIZE 4096u                       // Bytes reserved for RTT up-buffer
+#endif
+#ifndef VA_RTT_MODE
 #define VA_RTT_MODE SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL // RTT buffering mode
+#endif
 
 // Convenience Macros for User Function Timing
 #if (VA_ENABLED == 1)

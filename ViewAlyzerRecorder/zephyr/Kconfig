@@ -10,6 +10,28 @@ menuconfig VIEWALYZER
 
 if VIEWALYZER
 
+choice VIEWALYZER_TRANSPORT
+	prompt "Transport backend"
+	default VIEWALYZER_TRANSPORT_ITM
+	help
+	  Select how the recorder sends trace data to the host.
+
+config VIEWALYZER_TRANSPORT_ITM
+	bool "ARM ITM / SWO"
+	help
+	  Send recorder data over the Cortex-M ITM stimulus port.
+
+config VIEWALYZER_TRANSPORT_RTT
+	bool "SEGGER RTT"
+	select HAS_SEGGER_RTT
+	select USE_SEGGER_RTT
+	select STM32_ENABLE_DEBUG_SLEEP_STOP if SOC_FAMILY_STM32
+	help
+	  Send recorder data over SEGGER RTT.  Requires the Zephyr Segger module
+	  (add 'segger' to the west manifest name-allowlist then run west update).
+
+endchoice
+
 config VIEWALYZER_TRACE_THREADS
 	bool "Trace thread switches"
 	default y
@@ -72,5 +94,31 @@ config VIEWALYZER_ALLOW_DISABLE_INTERRUPTS
 	  Allow the recorder to mask interrupts around short internal critical
 	  sections. Disable this if the target environment must never disable
 	  interrupts from inside the recorder.
+
+config VIEWALYZER_RTT_CHANNEL
+	int "RTT up-buffer channel"
+	default 0
+	range 0 15
+	depends on VIEWALYZER_TRANSPORT_RTT
+	help
+	  SEGGER RTT up-buffer channel used by the recorder.
+
+config VIEWALYZER_CONFIGURE_RTT
+	bool "Configure the RTT up-buffer in VA_Init()"
+	default y
+	depends on VIEWALYZER_TRANSPORT_RTT
+	help
+	  Let the recorder call SEGGER_RTT_Init() and configure its RTT
+	  up-buffer during initialization. Disable this if another component
+	  owns RTT channel setup.
+
+config VIEWALYZER_RTT_BUFFER_SIZE
+	int "Recorder RTT buffer size"
+	default 4096
+	range 0 65535
+	depends on VIEWALYZER_TRANSPORT_RTT && VIEWALYZER_CONFIGURE_RTT
+	help
+	  Size of the recorder-owned RTT up-buffer. Set to 0 to use the RTT
+	  control block without providing a dedicated buffer.
 
 endif
