@@ -1309,6 +1309,7 @@ void VA_Init(uint32_t cpu_freq)
     _va_send_setup_packet(VA_SETUP_ISR_MAP, VA_ISR_ID_PENDSV, "PendSV");
 #endif
 #if (!VA_HAS_RTOS)
+// TODO this is redundant with the OS info packet below, consider consolidating
     _va_send_setup_packet(VA_SETUP_CONFIG_FLAGS, 0, "NO_RTOS");
 #endif
 
