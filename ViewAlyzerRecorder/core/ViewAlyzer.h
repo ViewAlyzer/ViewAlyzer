@@ -106,6 +106,10 @@ extern "C"
 #define VA_CAPTURE_STACK_USAGE 1 // Set to 0 to disable stack usage packets and queries
 #endif
 
+#ifndef VA_AUTO_SETUP_INTERVAL_MS
+#define VA_AUTO_SETUP_INTERVAL_MS 2000   // Auto re-emit sync + setup packets at this interval (ms). 0 = disabled.
+#endif
+
 // If using J-LINK RTT transport, configure RTT here by setting VA_CONFIGURE_RTT to 1
 // otherwise set to 0 to skip RTT configuration and user is expected to do it elsewhere
 #ifndef VA_CONFIGURE_RTT
@@ -230,6 +234,7 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     void VA_RegisterTransportSend(VA_TransportSendFn sendFn);
 #endif
     void VA_Init(uint32_t cpu_freq);
+    void VA_EmitSetupBundle(void);    // re-emit sync marker + all setup packets (call periodically, e.g. every 2-5 s)
     void VA_TickOverflowCheck(void);  // call periodically (e.g. every 1-10 s) to prevent DWT rollover misses
     void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type);
     void VA_RegisterUserFunction(uint8_t id, const char *name);

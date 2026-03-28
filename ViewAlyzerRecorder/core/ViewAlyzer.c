@@ -52,6 +52,7 @@ extern "C"
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8M_BASE__)
 #define DWT_ENABLED 1
     static volatile uint32_t g_dwt_overflow_count = 0;
+    static volatile uint32_t g_dwt_last_value = 0;
 #else
 #define DWT_ENABLED 0
 #warning "ViewAlyzer requires DWT Cycle Counter (Cortex-M3/M4/M7). ViewAlyzer functions disabled."
@@ -70,6 +71,11 @@ extern "C"
     VA_TaskMapEntry_t taskMap[VA_MAX_TASKS];
     uint8_t next_task_id = 1;
     static uint32_t _va_cpu_freq = 0;
+
+#if VA_AUTO_SETUP_INTERVAL_MS > 0
+    static uint64_t _va_last_bundle_ts = 0;
+    static bool     _va_emitting_bundle = false;
+#endif
 
     volatile uint32_t notificationValue = 0;
 
@@ -163,19 +169,35 @@ static void _va_send_bytes(const uint8_t *data, uint32_t length)
 /* ================================================================
  *  Packet emission layer
  * ================================================================ */
-#if VA_TRANSPORT_IS_CUSTOM
-void _va_emit_packet(const uint8_t *data, uint32_t length)
+static inline void _va_emit_packet_raw(const uint8_t *data, uint32_t length)
 {
+#if VA_TRANSPORT_IS_CUSTOM
     uint8_t cobs_buf[VA_MAX_PACKET_SIZE + (VA_MAX_PACKET_SIZE / 254) + 2];
     size_t encoded_len = va_cobs_encode(data, (size_t)length, cobs_buf);
     _va_send_bytes(cobs_buf, (uint32_t)encoded_len);
-}
 #else
+    _va_send_bytes(data, length);
+#endif
+}
+
 void _va_emit_packet(const uint8_t *data, uint32_t length)
 {
-    _va_send_bytes(data, length);
-}
+#if VA_AUTO_SETUP_INTERVAL_MS > 0
+    if (!_va_emitting_bundle && _va_cpu_freq > 0)
+    {
+        uint64_t now = _va_get_timestamp();
+        uint64_t interval_cycles = ((uint64_t)_va_cpu_freq / 1000) * VA_AUTO_SETUP_INTERVAL_MS;
+        if (now - _va_last_bundle_ts >= interval_cycles)
+        {
+            _va_last_bundle_ts = now;
+            _va_emitting_bundle = true;
+            VA_EmitSetupBundle();
+            _va_emitting_bundle = false;
+        }
+    }
 #endif
+    _va_emit_packet_raw(data, length);
+}
 
 /* ================================================================
  *  Packet construction helpers (non-static — adapters use these)
@@ -423,7 +445,6 @@ void _va_send_heap_setup_packet(uint8_t id, const char *name, uint32_t totalSize
 
 uint64_t _va_get_timestamp(void)
 {
-    static uint32_t last_dwt_value = 0;
     uint32_t high_part;
     uint32_t low_part;
     uint32_t temp_low;
@@ -431,11 +452,11 @@ uint64_t _va_get_timestamp(void)
     __disable_irq();
 
     uint32_t current_dwt = DWT->CYCCNT;
-    if (current_dwt < last_dwt_value)
+    if (current_dwt < g_dwt_last_value)
     {
         g_dwt_overflow_count++;
     }
-    last_dwt_value = current_dwt;
+    g_dwt_last_value = current_dwt;
     high_part = g_dwt_overflow_count;
     low_part = current_dwt;
     temp_low = DWT->CYCCNT;
@@ -452,6 +473,54 @@ void VA_TickOverflowCheck(void)
 {
     if (!VA_IS_INIT) return;
     (void)_va_get_timestamp();
+}
+
+void VA_EmitSetupBundle(void)
+{
+    if (!VA_IS_INIT)
+        return;
+
+    VA_CS_ENTER();
+
+    _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
+
+    char info_buf[40];
+    snprintf(info_buf, sizeof(info_buf), "CLK:%u", _va_cpu_freq);
+    _va_send_setup_packet(VA_SETUP_INFO, 0, info_buf);
+
+#if (VA_RTOS_SELECT == VA_RTOS_FREERTOS)
+    _va_send_setup_packet(VA_SETUP_OS_INFO, 0, "FreeRTOS");
+#elif (VA_RTOS_SELECT == VA_RTOS_ZEPHYR)
+    _va_send_setup_packet(VA_SETUP_OS_INFO, 0, "Zephyr");
+#else
+    _va_send_setup_packet(VA_SETUP_OS_INFO, 0, "BareMetal");
+#endif
+
+#if VA_HAS_RTOS
+    for (int i = 0; i < VA_MAX_TASKS; ++i)
+    {
+        if (taskMap[i].active)
+        {
+            _va_send_setup_packet(VA_SETUP_TASK_MAP, taskMap[i].id, taskMap[i].name);
+            _va_send_task_create_packet(taskMap[i].id, _va_get_timestamp(),
+                                        taskMap[i].uxPriority,
+                                        taskMap[i].uxBasePriority,
+                                        taskMap[i].ulStackDepth);
+        }
+    }
+
+    for (int i = 0; i < VA_MAX_SYNC_OBJECTS; ++i)
+    {
+        if (queueObjectMap[i].active)
+        {
+            _va_send_setup_packet(_va_get_setup_packet_type(queueObjectMap[i].type),
+                                  queueObjectMap[i].id,
+                                  queueObjectMap[i].name);
+        }
+    }
+#endif
+
+    VA_CS_EXIT();
 }
 
 static void _va_enable_dwt_counter(void)
@@ -1251,6 +1320,13 @@ void VA_Init(uint32_t cpu_freq)
 {
     VA_CS_ENTER();
     _va_cpu_freq = cpu_freq;
+    g_dwt_overflow_count = 0;
+    g_dwt_last_value = 0;
+
+#if VA_AUTO_SETUP_INTERVAL_MS > 0
+    _va_last_bundle_ts = 0;
+    _va_emitting_bundle = false;
+#endif
 
 #if VA_HAS_RTOS
     for (int i = 0; i < VA_MAX_TASKS; ++i)
