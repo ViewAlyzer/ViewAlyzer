@@ -172,6 +172,7 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_EVENT_GPIO             0x0F
 #define VA_EVENT_COUNTER          0x10
 #define VA_EVENT_HEAP             0x11
+#define VA_EVENT_SLEEP            0x12
 
 
 // --- Setup Message Codes ---
@@ -248,6 +249,11 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     void VA_LogGPIO(uint8_t id, bool state);
     void VA_LogCounter(uint8_t id, uint32_t value);
     void VA_LogHeap(uint8_t id, uint32_t usedBytes);
+
+    /* ── Sleep tracing (Zephyr k_sleep / k_msleep / k_usleep) ── */
+    void va_logSleepEnter(void *taskHandle);
+    void va_logSleepExit(void *taskHandle);
+
     void VA_RegisterGPIO(uint8_t id, const char *name);
     void VA_RegisterHeap(uint8_t id, const char *name, uint32_t totalSize);
 
@@ -335,6 +341,8 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define va_logQueueObjectGive(queueObject, timeout) ((void)0)
 #define va_logQueueObjectTake(queueObject, timeout) ((void)0)
 #define va_logQueueObjectBlocking(queueObject) ((void)0)
+#define va_logSleepEnter(h) ((void)0)
+#define va_logSleepExit(h) ((void)0)
 
 bool va_isnit(void);
 

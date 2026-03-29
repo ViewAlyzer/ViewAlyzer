@@ -928,6 +928,28 @@ void VA_LogHeap(uint8_t id, uint32_t usedBytes)
     VA_CS_EXIT();
 }
 
+/* ================================================================
+ *  Sleep enter/exit (k_sleep, k_msleep, k_usleep)
+ * ================================================================ */
+
+void va_logSleepEnter(void *taskHandle)
+{
+    VA_CS_ENTER();
+    uint8_t id = _va_find_task_id(taskHandle);
+    if (id != 0)
+        _va_send_event_packet(VA_EVENT_SLEEP | VA_EVENT_FLAG_START_END, id, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
+void va_logSleepExit(void *taskHandle)
+{
+    VA_CS_ENTER();
+    uint8_t id = _va_find_task_id(taskHandle);
+    if (id != 0)
+        _va_send_event_packet(VA_EVENT_SLEEP, id, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
 void VA_RegisterGPIO(uint8_t id, const char *name)
 {
     VA_CS_ENTER();

@@ -399,4 +399,61 @@ void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
 }
 #endif
 
+/* ================================================================
+ *  Sleep tracing dispatch (k_sleep / k_msleep / k_usleep)
+ * ================================================================ */
+
+#if defined(CONFIG_VIEWALYZER_TRACE_SLEEP)
+void sys_trace_k_thread_sleep_enter(k_timeout_t timeout)
+{
+    ARG_UNUSED(timeout);
+    if (!va_isnit())
+        return;
+    va_logSleepEnter((void *)k_current_get());
+}
+
+void sys_trace_k_thread_sleep_exit(k_timeout_t timeout, int ret)
+{
+    ARG_UNUSED(timeout);
+    ARG_UNUSED(ret);
+    if (!va_isnit())
+        return;
+    va_logSleepExit((void *)k_current_get());
+}
+
+void sys_trace_k_thread_msleep_enter(int32_t ms)
+{
+    ARG_UNUSED(ms);
+    if (!va_isnit())
+        return;
+    va_logSleepEnter((void *)k_current_get());
+}
+
+void sys_trace_k_thread_msleep_exit(int32_t ms, int ret)
+{
+    ARG_UNUSED(ms);
+    ARG_UNUSED(ret);
+    if (!va_isnit())
+        return;
+    va_logSleepExit((void *)k_current_get());
+}
+
+void sys_trace_k_thread_usleep_enter(int32_t us)
+{
+    ARG_UNUSED(us);
+    if (!va_isnit())
+        return;
+    va_logSleepEnter((void *)k_current_get());
+}
+
+void sys_trace_k_thread_usleep_exit(int32_t us, int ret)
+{
+    ARG_UNUSED(us);
+    ARG_UNUSED(ret);
+    if (!va_isnit())
+        return;
+    va_logSleepExit((void *)k_current_get());
+}
+#endif
+
 #endif /* VA_ENABLED && VA_RTOS_ZEPHYR */

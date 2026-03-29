@@ -52,6 +52,14 @@ config VIEWALYZER_TRACE_SEMAPHORES
 	default y
 	select TRACING_SEMAPHORE
 
+config VIEWALYZER_TRACE_SLEEP
+	bool "Trace thread sleep (k_sleep / k_msleep / k_usleep)"
+	default y
+	help
+	  Emit enter/exit events when threads call k_sleep, k_msleep,
+	  or k_usleep.  Allows the viewer to distinguish explicit sleep
+	  from generic OS/idle time.
+
 config VIEWALYZER_TRACE_MESSAGE_QUEUES
 	bool "Trace message queues"
 	default y
@@ -120,5 +128,15 @@ config VIEWALYZER_RTT_BUFFER_SIZE
 	help
 	  Size of the recorder-owned RTT up-buffer. Set to 0 to use the RTT
 	  control block without providing a dedicated buffer.
+
+config VIEWALYZER_AUTO_SETUP_INTERVAL_MS
+	int "Auto setup bundle re-emit interval (ms)"
+	default 2000
+	range 0 60000
+	help
+	  Interval in milliseconds at which the recorder automatically
+	  re-emits the sync marker and setup packets. This helps the host
+	  application resync if it connects mid-session. Set to 0 to disable
+	  automatic re-emission.
 
 endif
