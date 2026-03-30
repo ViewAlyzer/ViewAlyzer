@@ -90,44 +90,44 @@ static void va_lpuart_send(const uint8_t *data, uint32_t length)
 
 static void SWO_Init(uint32_t cpu_hz, uint32_t swo_baud, uint32_t port)
 {
-  // 0) DBG + GPIO
-#ifdef DBGMCU_CR_TRACE_IOEN
-  DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN; // enable trace pins
-#ifdef DBGMCU_CR_TRACE_MODE
-  DBGMCU->CR &= ~DBGMCU_CR_TRACE_MODE; // 00 = async SWO (not sync TRACE)
-#endif
-#endif
+//   // 0) DBG + GPIO
+// #ifdef DBGMCU_CR_TRACE_IOEN
+//   DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN; // enable trace pins
+// #ifdef DBGMCU_CR_TRACE_MODE
+//   DBGMCU->CR &= ~DBGMCU_CR_TRACE_MODE; // 00 = async SWO (not sync TRACE)
+// #endif
+// #endif
 
-  // 1) Enable trace fabric
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; // TRCENA
+//   // 1) Enable trace fabric
+//   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; // TRCENA
 
-  // 2) Lock things down while we configure
-#ifdef ITM_LAR
-  ITM->LAR = 0xC5ACCE55;
-#endif
-  ITM->TCR = 0; // disable ITM while configuring
-  ITM->TPR = 0; // allow all stimulus ports (unprivileged OK)
-  ITM->TER = 0; // disable all ports for now
+//   // 2) Lock things down while we configure
+// #ifdef ITM_LAR
+//   ITM->LAR = 0xC5ACCE55;
+// #endif
+//   ITM->TCR = 0; // disable ITM while configuring
+//   ITM->TPR = 0; // allow all stimulus ports (unprivileged OK)
+//   ITM->TER = 0; // disable all ports for now
 
-#ifdef DBGMCU_CR_TRACE_IOEN
-  DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN; // enable trace pins
-#ifdef DBGMCU_CR_TRACE_MODE
-  DBGMCU->CR &= ~DBGMCU_CR_TRACE_MODE; // 00b = async SWO (important!)
-#endif
-#endif
+// #ifdef DBGMCU_CR_TRACE_IOEN
+//   DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN; // enable trace pins
+// #ifdef DBGMCU_CR_TRACE_MODE
+//   DBGMCU->CR &= ~DBGMCU_CR_TRACE_MODE; // 00b = async SWO (important!)
+// #endif
+// #endif
 
-  // 3) TPIU for async NRZ @ exact baud
-  uint32_t acpr = (swo_baud ? (cpu_hz / swo_baud) - 1u : 0u);
-  TPI->ACPR = acpr;  // *** use the math; don't hard-code ***
-  TPI->SPPR = 0x2;   // 2 = NRZ (UART) ; 1 = Manchester
-  TPI->FFCR = 0x100; // disable continuous formatter
-  TPI->CSPSR = 1;    // port size = 1 bit (good default)
+//   // 3) TPIU for async NRZ @ exact baud
+//   uint32_t acpr = (swo_baud ? (cpu_hz / swo_baud) - 1u : 0u);
+//   TPI->ACPR = acpr;  // *** use the math; don't hard-code ***
+//   TPI->SPPR = 0x2;   // 2 = NRZ (UART) ; 1 = Manchester
+//   TPI->FFCR = 0x100; // disable continuous formatter
+//   TPI->CSPSR = 1;    // port size = 1 bit (good default)
 
-  // 4) Enable your ITM port and the ITM itself
-  ITM->TER = (1u << port);
-  ITM->TCR = ITM_TCR_ITMENA_Msk; // *** ITMENA is bit 0 ***
-                                 // optional: timestamps, sync:
-                                 // ITM->TCR |= ITM_TCR_TSENA_Msk | ITM_TCR_SYNCENA_Msk;
+//   // 4) Enable your ITM port and the ITM itself
+//   ITM->TER = (1u << port);
+//   ITM->TCR = ITM_TCR_ITMENA_Msk; // *** ITMENA is bit 0 ***
+//                                  // optional: timestamps, sync:
+//                                  // ITM->TCR |= ITM_TCR_TSENA_Msk | ITM_TCR_SYNCENA_Msk;
 }
 /* USER CODE END 0 */
 
@@ -167,26 +167,26 @@ int main(void)
   VA_RegisterTransportSend(va_lpuart_send);
 #else
   // --- ST-Link SWO transport ---
-  SWO_Init(170000000u, 2000000u, 1);
+ // SWO_Init(170000000u, 2000000u, 1);
 #endif
 
   HAL_Delay(3000);
   VA_Init(SystemCoreClock);     
                                                         
-  VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_GRAPH);     // Task02: Sine value from sensor
-  VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);  // Task05: HAL tick counter
-  VA_RegisterUserTrace(44, "Task08 Toggle", VA_USER_TYPE_TOGGLE); // Task08: Function entry/exit toggle
-  VA_RegisterUserFunction(45, "Custom Function");                // Task08: Function timing
-  VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_GRAPH); // Task03: Processed sensor values
-  VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_COUNTER); // Task05: Mutex-protected shared counter
-  VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);   // Task07: Mutex-protected operation result
-  VA_RegisterUserTrace(49, "Local Counter", VA_USER_TYPE_GRAPH);  // Task08: Local copy of shared counter
-  VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_BAR); // WorkloadManager: Current profile index
+  // VA_RegisterUserTrace(42, "Sine Wave", VA_USER_TYPE_GRAPH);     // Task02: Sine value from sensor
+  // VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);  // Task05: HAL tick counter
+  // VA_RegisterUserTrace(44, "Task08 Toggle", VA_USER_TYPE_TOGGLE); // Task08: Function entry/exit toggle
+  // VA_RegisterUserFunction(45, "Custom Function");                // Task08: Function timing
+  // VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_GRAPH); // Task03: Processed sensor values
+  // VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_COUNTER); // Task05: Mutex-protected shared counter
+  // VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);   // Task07: Mutex-protected operation result
+  // VA_RegisterUserTrace(49, "Local Counter", VA_USER_TYPE_GRAPH);  // Task08: Local copy of shared counter
+  // VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_BAR); // WorkloadManager: Current profile index
   
-  // Contention test task traces
-  VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_COUNTER);  // ContentionLow: How many times accessed mutex
-  VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_COUNTER);  // ContentionMed: How many times accessed mutex (-1 = timeout)
-  VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_GRAPH);     // ContentionHigh: Wait time in ticks to get mutex
+  // // Contention test task traces
+  // VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_COUNTER);  // ContentionLow: How many times accessed mutex
+  // VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_COUNTER);  // ContentionMed: How many times accessed mutex (-1 = timeout)
+  // VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_GRAPH);     // ContentionHigh: Wait time in ticks to get mutex
   
   /* USER CODE END 2 */
 

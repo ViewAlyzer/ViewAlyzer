@@ -525,7 +525,11 @@ void VA_EmitSetupBundle(void)
 
 static void _va_enable_dwt_counter(void)
 {
+#if (__ARM_ARCH >= 8)
+    DCB->DEMCR |= DCB_DEMCR_TRCENA_Msk;
+#else
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+#endif
     DWT->CYCCNT = 0;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
