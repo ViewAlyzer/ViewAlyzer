@@ -86,7 +86,7 @@ void va_udp_send_sync_and_clock(va_udp_ctx_t *ctx);
 void va_udp_send_trace_setup(va_udp_ctx_t *ctx, uint8_t trace_id,
                              uint8_t trace_type, const char *name);
 
-/** Register a user function name. */
+/** Register a user event or span name. */
 void va_udp_send_function_map(va_udp_ctx_t *ctx, uint8_t func_id, const char *name);
 
 /* ── Core event packets ────────────────────────────────────────────────── */
@@ -103,7 +103,7 @@ void va_udp_send_trace_float(va_udp_ctx_t *ctx, uint8_t trace_id,
 void va_udp_send_toggle(va_udp_ctx_t *ctx, uint8_t toggle_id,
                         uint64_t timestamp, bool state);
 
-/** User function entry/exit. */
+/** User event or span start/end marker. */
 void va_udp_send_function(va_udp_ctx_t *ctx, uint8_t func_id,
                           bool is_entry, uint64_t timestamp);
 

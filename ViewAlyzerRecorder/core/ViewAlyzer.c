@@ -121,14 +121,14 @@ static void _va_strcat_suffix(char *buf, size_t buf_size, const char *name, cons
     volatile uint32_t g_task_uxBasePriority = 0;
     volatile uint32_t g_task_ulStackDepth = 0;
 
-    // User Function Tracking (Independent of RTOS)
+    // User Event Tracking (Independent of RTOS)
     typedef struct
     {
         uint8_t id;
         char name[VA_MAX_TASK_NAME_LEN];
         bool active;
-    } VA_UserFunctionMapEntry_t;
-    static VA_UserFunctionMapEntry_t userFunctionMap[VA_MAX_USER_FUNCTIONS];
+    } VA_UserEventMapEntry_t;
+    static VA_UserEventMapEntry_t userEventMap[VA_MAX_USER_EVENTS];
 
 #if VA_HAS_RTOS
     // --- Queue / sync-object map (RTOS-agnostic storage, adapter determines type) ---
@@ -731,33 +731,33 @@ uint8_t _va_assign_queue_object_id(void *handle, const char *name, VA_QueueObjec
 #endif /* VA_HAS_RTOS */
 
 /* ================================================================
- *  User-function map (RTOS-independent)
+ *  User-event map (RTOS-independent)
  * ================================================================ */
 
-static uint8_t _va_find_user_function_id(uint8_t function_id)
+static uint8_t _va_find_user_event_id(uint8_t event_id)
 {
-    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
     {
-        if (userFunctionMap[i].active && userFunctionMap[i].id == function_id)
+        if (userEventMap[i].active && userEventMap[i].id == event_id)
         {
-            return userFunctionMap[i].id;
+            return userEventMap[i].id;
         }
     }
     return 0;
 }
 
-static uint8_t _va_assign_user_function_id(uint8_t function_id, const char *name)
+static uint8_t _va_assign_user_event_id(uint8_t event_id, const char *name)
 {
-    if (name == NULL || function_id == 0)
+    if (name == NULL || event_id == 0)
         return 0;
 
-    if (_va_find_user_function_id(function_id) != 0)
-        return function_id;
+    if (_va_find_user_event_id(event_id) != 0)
+        return event_id;
 
     int empty_slot = -1;
-    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
     {
-        if (!userFunctionMap[i].active)
+        if (!userEventMap[i].active)
         {
             empty_slot = i;
             break;
@@ -766,13 +766,13 @@ static uint8_t _va_assign_user_function_id(uint8_t function_id, const char *name
     if (empty_slot == -1)
         return 0;
 
-    userFunctionMap[empty_slot].active = true;
-    userFunctionMap[empty_slot].id = function_id;
-    strncpy(userFunctionMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
-    userFunctionMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
+    userEventMap[empty_slot].active = true;
+    userEventMap[empty_slot].id = event_id;
+    strncpy(userEventMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
+    userEventMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
 
-    _va_send_setup_packet(VA_SETUP_USER_FUNCTION_MAP, function_id, userFunctionMap[empty_slot].name);
-    return function_id;
+    _va_send_setup_packet(VA_SETUP_USER_EVENT_MAP, event_id, userEventMap[empty_slot].name);
+    return event_id;
 }
 
 /* ================================================================
@@ -1338,10 +1338,10 @@ void va_logQueueObjectBlocking(void *queueObject)
 }
 
 /* ================================================================
- *  User Function Event Logging
+ *  User Event Logging
  * ================================================================ */
 
-void VA_RegisterUserFunction(uint8_t id, const char *name)
+void VA_RegisterUserEvent(uint8_t id, const char *name)
 {
     VA_CS_ENTER();
     if (id == 0 || name == NULL)
@@ -1349,11 +1349,16 @@ void VA_RegisterUserFunction(uint8_t id, const char *name)
         VA_CS_EXIT();
         return;
     }
-    _va_assign_user_function_id(id, name);
+    _va_assign_user_event_id(id, name);
     VA_CS_EXIT();
 }
 
-void VA_LogUserEvent(uint8_t id, bool state)
+void VA_RegisterUserFunction(uint8_t id, const char *name)
+{
+    VA_RegisterUserEvent(id, name);
+}
+
+void VA_LogEvent(uint8_t id, bool state)
 {
     VA_CS_ENTER();
     if (id == 0)
@@ -1361,9 +1366,14 @@ void VA_LogUserEvent(uint8_t id, bool state)
         VA_CS_EXIT();
         return;
     }
-    uint8_t event_flags = (state == USER_EVENT_START) ? (VA_EVENT_FLAG_START_END | VA_EVENT_USER_FUNCTION) : VA_EVENT_USER_FUNCTION;
+    uint8_t event_flags = (state == USER_EVENT_START) ? (VA_EVENT_FLAG_START_END | VA_EVENT_USER_EVENT) : VA_EVENT_USER_EVENT;
     _va_send_event_packet(event_flags, id, _va_get_timestamp());
     VA_CS_EXIT();
+}
+
+void VA_LogUserEvent(uint8_t id, bool state)
+{
+    VA_LogEvent(id, state);
 }
 
 /* ================================================================
@@ -1409,11 +1419,11 @@ void VA_Init(uint32_t cpu_freq)
     next_queue_object_id = 1;
 #endif
 
-    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
     {
-        userFunctionMap[i].active = false;
-        userFunctionMap[i].id = 0;
-        userFunctionMap[i].name[0] = '\0';
+        userEventMap[i].active = false;
+        userEventMap[i].id = 0;
+        userEventMap[i].name[0] = '\0';
     }
 
     _va_enable_dwt_counter();

@@ -643,9 +643,9 @@ void StartTask08(void *argument)
     // Wait for notification from Task04 (blocking with max delay)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     
-    // Log function entry
+    // Log event start
     VA_LogToggle(44, TOGGLE_HIGH);
-    VA_LogUserEvent(45, USER_EVENT_START);
+    VA_LogEvent(45, USER_EVENT_START);
     
     // Get inverted sine value
     invertedSineVal = 200 - sineVal;
@@ -678,9 +678,9 @@ void StartTask08(void *argument)
       __NOP();
     }
 
-    // Log function exit
+    // Log event end
     VA_LogToggle(44, TOGGLE_LOW);
-    VA_LogUserEvent(45, USER_EVENT_END);
+    VA_LogEvent(45, USER_EVENT_END);
     
     vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
   }

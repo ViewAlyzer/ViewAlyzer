@@ -96,7 +96,7 @@ int main(void) {
     // Optional: register named user traces for visualization
     VA_RegisterUserTrace(42, "Sensor Value", VA_USER_TYPE_GRAPH);
     VA_RegisterUserTrace(43, "LED Toggle", VA_USER_TYPE_TOGGLE);
-    VA_RegisterUserFunction(44, "ProcessData");
+    VA_RegisterUserEvent(44, "ProcessData");
 
     // Start RTOS...
 }
@@ -147,10 +147,10 @@ VA_LogString(42, "threshold exceeded");
 // Toggle state (high/low)
 VA_LogToggle(43, true);
 
-// Function profiling
-VA_FUNCTION_ENTRY(44);
+// User event span
+VA_EVENT_START(44);
 process_data(buffer);
-VA_FUNCTION_EXIT(44);
+VA_EVENT_END(44);
 
 // ISR entry/exit (bare-metal or manual ISR tracking)
 void SysTick_Handler(void) {

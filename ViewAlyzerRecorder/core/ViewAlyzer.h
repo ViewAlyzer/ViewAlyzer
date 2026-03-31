@@ -90,8 +90,16 @@ extern "C"
 #define VA_MAX_SYNC_OBJECTS   64  // Mutexes, semaphores, queues, FIFOs
 #endif
 
+#ifndef VA_MAX_USER_EVENTS
+#ifdef VA_MAX_USER_FUNCTIONS
+#define VA_MAX_USER_EVENTS VA_MAX_USER_FUNCTIONS
+#else
+#define VA_MAX_USER_EVENTS 16  // User-profiled spans or events
+#endif
+#endif
+
 #ifndef VA_MAX_USER_FUNCTIONS
-#define VA_MAX_USER_FUNCTIONS 16  // User-profiled functions
+#define VA_MAX_USER_FUNCTIONS VA_MAX_USER_EVENTS
 #endif
 
 #ifndef VA_MAX_TASK_NAME_LEN
@@ -122,11 +130,15 @@ extern "C"
 #define VA_RTT_MODE SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL // RTT buffering mode
 #endif
 
-// Convenience Macros for User Function Timing
+// Convenience Macros for User Event Timing
 #if (VA_ENABLED == 1)
-#define VA_FUNCTION_ENTRY(id) VA_LogUserEvent(id, USER_EVENT_START)
-#define VA_FUNCTION_EXIT(id) VA_LogUserEvent(id, USER_EVENT_END)
+#define VA_EVENT_START(id) VA_LogEvent(id, USER_EVENT_START)
+#define VA_EVENT_END(id) VA_LogEvent(id, USER_EVENT_END)
+#define VA_FUNCTION_ENTRY(id) VA_EVENT_START(id)
+#define VA_FUNCTION_EXIT(id) VA_EVENT_END(id)
 #else
+#define VA_EVENT_START(id) ((void)0)
+#define VA_EVENT_END(id) ((void)0)
 #define VA_FUNCTION_ENTRY(id) ((void)0)
 #define VA_FUNCTION_EXIT(id) ((void)0)
 #endif
@@ -165,7 +177,8 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_EVENT_QUEUE            0x08
 #define VA_EVENT_TASK_STACK_USAGE 0x09
 #define VA_EVENT_USER_TOGGLE      0x0A
-#define VA_EVENT_USER_FUNCTION    0x0B
+#define VA_EVENT_USER_EVENT       0x0B
+#define VA_EVENT_USER_FUNCTION    VA_EVENT_USER_EVENT
 #define VA_EVENT_MUTEX_CONTENTION 0x0C
 #define VA_EVENT_STRING_EVENT    0x0D
 #define VA_EVENT_FLOAT_TRACE      0x0E
@@ -183,7 +196,8 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_SETUP_SEMAPHORE_MAP     0x73
 #define VA_SETUP_MUTEX_MAP         0x74
 #define VA_SETUP_QUEUE_MAP         0x75
-#define VA_SETUP_USER_FUNCTION_MAP 0x76
+#define VA_SETUP_USER_EVENT_MAP   0x76
+#define VA_SETUP_USER_FUNCTION_MAP VA_SETUP_USER_EVENT_MAP
 #define VA_SETUP_CONFIG_FLAGS      0x77
 #define VA_SETUP_GPIO_MAP          0x78
 #define VA_SETUP_HEAP_INFO         0x79
@@ -238,14 +252,16 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     void VA_EmitSetupBundle(void);    // re-emit sync marker + all setup packets (call periodically, e.g. every 2-5 s)
     void VA_TickOverflowCheck(void);  // call periodically (e.g. every 1-10 s) to prevent DWT rollover misses
     void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type);
-    void VA_RegisterUserFunction(uint8_t id, const char *name);
+    void VA_RegisterUserEvent(uint8_t id, const char *name);
+    void VA_RegisterUserFunction(uint8_t id, const char *name); /* backward-compatible alias */
     void VA_LogISRStart(uint8_t isrId);
     void VA_LogISREnd(uint8_t isrId);
     void VA_LogTrace(uint8_t id, int32_t value);
     void VA_LogTraceFloat(uint8_t id, float value);
     void VA_LogString(uint8_t id, const char *msg);
     void VA_LogToggle(uint8_t id, bool state);
-    void VA_LogUserEvent(uint8_t id, bool state);
+    void VA_LogEvent(uint8_t id, bool state);
+    void VA_LogUserEvent(uint8_t id, bool state); /* backward-compatible alias */
     void VA_LogGPIO(uint8_t id, bool state);
     void VA_LogCounter(uint8_t id, uint32_t value);
     void VA_LogHeap(uint8_t id, uint32_t usedBytes);
@@ -315,6 +331,7 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_RegisterTransportSend(fn) ((void)0)
 #define VA_Init(cpu_freq) ((void)0)
 #define VA_TickOverflowCheck() ((void)0)
+#define VA_RegisterUserEvent(id, name) ((void)0)
 #define VA_RegisterUserTrace(id, name, type) ((void)0)
 #define VA_RegisterUserFunction(id, name) ((void)0)
 #define VA_LogISRStart(isrId) ((void)0)
@@ -323,6 +340,7 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_LogTraceFloat(id, value) ((void)0)
 #define VA_LogString(id, msg) ((void)0)
 #define VA_LogToggle(id, state) ((void)0)
+#define VA_LogEvent(id, state) ((void)0)
 #define VA_LogUserEvent(id, state) ((void)0)
 #define VA_LogGPIO(id, state) ((void)0)
 #define VA_LogCounter(id, value) ((void)0)
