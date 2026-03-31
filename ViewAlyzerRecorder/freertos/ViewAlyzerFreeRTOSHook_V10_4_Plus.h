@@ -24,6 +24,31 @@
 // ViewAlyzer Configuration for FreeRTOS V10.4.0 and later
 // This version supports the new trace macro signatures with notification indices
 
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Forward declarations for ViewAlyzer core functions used by trace macros.
+// (Cannot #include "ViewAlyzer.h" here — it pulls in main.h which creates
+//  a circular dependency through FreeRTOS.h → FreeRTOSConfig.h → this file.)
+void va_taskswitchedin(void *taskHandle);
+void va_taskswitchedout(void *taskHandle);
+void va_taskcreated(void *taskHandle, const char *name);
+void va_logtasknotifygive(void *srcHandle, void *destHandle, uint32_t value);
+void va_logtasknotifytake(void *taskHandle, uint32_t value);
+void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint);
+void va_updateQueueObjectType(void *queueObject, const char *typeHint);
+void va_logQueueObjectGive(void *queueObject, uint32_t timeout);
+void va_logQueueObjectTake(void *queueObject, uint32_t timeout);
+void va_logQueueObjectBlocking(void *queueObject);
+
+#ifdef __cplusplus
+}
+#endif
+
 // Suggested FreeRTOS Configs
 #define configRECORD_STACK_HIGH_ADDRESS 1
 

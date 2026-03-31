@@ -3,6 +3,30 @@
 #if defined(VA_ENABLED) && (VA_ENABLED == 1) && \
     ((defined(VA_TRACE_FREERTOS) && (VA_TRACE_FREERTOS == 1)) || \
      (defined(VA_RTOS_SELECT) && (VA_RTOS_SELECT == 1)))
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Forward declarations for ViewAlyzer core functions used by trace macros.
+void va_taskswitchedin(void *taskHandle);
+void va_taskswitchedout(void *taskHandle);
+void va_taskcreated(void *taskHandle, const char *name);
+void va_logtasknotifygive(void *srcHandle, void *destHandle, uint32_t value);
+void va_logtasknotifytake(void *taskHandle, uint32_t value);
+void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint);
+void va_updateQueueObjectType(void *queueObject, const char *typeHint);
+void va_logQueueObjectGive(void *queueObject, uint32_t timeout);
+void va_logQueueObjectTake(void *queueObject, uint32_t timeout);
+void va_logQueueObjectBlocking(void *queueObject);
+
+#ifdef __cplusplus
+}
+#endif
+
 // Suggested FreeRTOS Configs
 #define configRECORD_STACK_HIGH_ADDRESS 1
 

@@ -31,7 +31,6 @@ extern "C"
 
 #include "VA_Internal.h"
 #include <string.h>
-#include <stdio.h>
 
 // Include RTT header only if needed
 #if VA_TRANSPORT_IS_JLINK
@@ -48,6 +47,42 @@ extern "C"
 #include "viewalyzer_cobs.h"
     static VA_TransportSendFn s_user_send_fn = NULL;
 #endif
+
+/* Lightweight uint32-to-decimal into a prefix buffer, e.g. "CLK:170000000" */
+static char *_va_u32_to_str(char *buf, size_t buf_size, const char *prefix, uint32_t val)
+{
+    size_t plen = strlen(prefix);
+    if (plen >= buf_size) { buf[0] = '\0'; return buf; }
+    memcpy(buf, prefix, plen);
+
+    char tmp[11]; /* max 10 digits for uint32 + NUL */
+    int i = (int)sizeof(tmp) - 1;
+    tmp[i] = '\0';
+    if (val == 0) { tmp[--i] = '0'; }
+    else { while (val) { tmp[--i] = '0' + (char)(val % 10); val /= 10; } }
+    const char *digits = &tmp[i];
+    size_t dlen = sizeof(tmp) - 1 - (size_t)i;
+
+    if (plen + dlen >= buf_size) dlen = buf_size - plen - 1;
+    memcpy(buf + plen, digits, dlen);
+    buf[plen + dlen] = '\0';
+    return buf;
+}
+
+/* Lightweight "name_Suffix" concatenation (replaces snprintf("%s_Suffix")) */
+static void _va_strcat_suffix(char *buf, size_t buf_size, const char *name, const char *suffix)
+{
+    size_t nlen = strlen(name);
+    size_t slen = strlen(suffix);
+    if (nlen + 1 + slen >= buf_size)
+        nlen = (nlen + 1 + slen >= buf_size && buf_size > slen + 2) ? buf_size - slen - 2 : nlen;
+    size_t pos = 0;
+    if (nlen > 0) { memcpy(buf, name, nlen); pos = nlen; }
+    buf[pos++] = '_';
+    size_t copy = (pos + slen < buf_size) ? slen : buf_size - pos - 1;
+    memcpy(buf + pos, suffix, copy);
+    buf[pos + copy] = '\0';
+}
 
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8M_BASE__)
 #define DWT_ENABLED 1
@@ -86,14 +121,14 @@ extern "C"
     volatile uint32_t g_task_uxBasePriority = 0;
     volatile uint32_t g_task_ulStackDepth = 0;
 
-    // User Function Tracking (Independent of RTOS)
+    // User Event Tracking (Independent of RTOS)
     typedef struct
     {
         uint8_t id;
         char name[VA_MAX_TASK_NAME_LEN];
         bool active;
-    } VA_UserFunctionMapEntry_t;
-    static VA_UserFunctionMapEntry_t userFunctionMap[VA_MAX_USER_FUNCTIONS];
+    } VA_UserEventMapEntry_t;
+    static VA_UserEventMapEntry_t userEventMap[VA_MAX_USER_EVENTS];
 
 #if VA_HAS_RTOS
     // --- Queue / sync-object map (RTOS-agnostic storage, adapter determines type) ---
@@ -485,7 +520,7 @@ void VA_EmitSetupBundle(void)
     _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
     char info_buf[40];
-    snprintf(info_buf, sizeof(info_buf), "CLK:%u", _va_cpu_freq);
+    _va_u32_to_str(info_buf, sizeof(info_buf), "CLK:", _va_cpu_freq);
     _va_send_setup_packet(VA_SETUP_INFO, 0, info_buf);
 
 #if (VA_RTOS_SELECT == VA_RTOS_FREERTOS)
@@ -525,7 +560,11 @@ void VA_EmitSetupBundle(void)
 
 static void _va_enable_dwt_counter(void)
 {
+#if (__ARM_ARCH >= 8)
+    DCB->DEMCR |= DCB_DEMCR_TRCENA_Msk;
+#else
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+#endif
     DWT->CYCCNT = 0;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
@@ -692,33 +731,33 @@ uint8_t _va_assign_queue_object_id(void *handle, const char *name, VA_QueueObjec
 #endif /* VA_HAS_RTOS */
 
 /* ================================================================
- *  User-function map (RTOS-independent)
+ *  User-event map (RTOS-independent)
  * ================================================================ */
 
-static uint8_t _va_find_user_function_id(uint8_t function_id)
+static uint8_t _va_find_user_event_id(uint8_t event_id)
 {
-    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
     {
-        if (userFunctionMap[i].active && userFunctionMap[i].id == function_id)
+        if (userEventMap[i].active && userEventMap[i].id == event_id)
         {
-            return userFunctionMap[i].id;
+            return userEventMap[i].id;
         }
     }
     return 0;
 }
 
-static uint8_t _va_assign_user_function_id(uint8_t function_id, const char *name)
+static uint8_t _va_assign_user_event_id(uint8_t event_id, const char *name)
 {
-    if (name == NULL || function_id == 0)
+    if (name == NULL || event_id == 0)
         return 0;
 
-    if (_va_find_user_function_id(function_id) != 0)
-        return function_id;
+    if (_va_find_user_event_id(event_id) != 0)
+        return event_id;
 
     int empty_slot = -1;
-    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
     {
-        if (!userFunctionMap[i].active)
+        if (!userEventMap[i].active)
         {
             empty_slot = i;
             break;
@@ -727,13 +766,13 @@ static uint8_t _va_assign_user_function_id(uint8_t function_id, const char *name
     if (empty_slot == -1)
         return 0;
 
-    userFunctionMap[empty_slot].active = true;
-    userFunctionMap[empty_slot].id = function_id;
-    strncpy(userFunctionMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
-    userFunctionMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
+    userEventMap[empty_slot].active = true;
+    userEventMap[empty_slot].id = event_id;
+    strncpy(userEventMap[empty_slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
+    userEventMap[empty_slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
 
-    _va_send_setup_packet(VA_SETUP_USER_FUNCTION_MAP, function_id, userFunctionMap[empty_slot].name);
-    return function_id;
+    _va_send_setup_packet(VA_SETUP_USER_EVENT_MAP, event_id, userEventMap[empty_slot].name);
+    return event_id;
 }
 
 /* ================================================================
@@ -928,6 +967,28 @@ void VA_LogHeap(uint8_t id, uint32_t usedBytes)
     VA_CS_EXIT();
 }
 
+/* ================================================================
+ *  Sleep enter/exit (k_sleep, k_msleep, k_usleep)
+ * ================================================================ */
+
+void va_logSleepEnter(void *taskHandle)
+{
+    VA_CS_ENTER();
+    uint8_t id = _va_find_task_id(taskHandle);
+    if (id != 0)
+        _va_send_event_packet(VA_EVENT_SLEEP | VA_EVENT_FLAG_START_END, id, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
+void va_logSleepExit(void *taskHandle)
+{
+    VA_CS_ENTER();
+    uint8_t id = _va_find_task_id(taskHandle);
+    if (id != 0)
+        _va_send_event_packet(VA_EVENT_SLEEP, id, _va_get_timestamp());
+    VA_CS_EXIT();
+}
+
 void VA_RegisterGPIO(uint8_t id, const char *name)
 {
     VA_CS_ENTER();
@@ -1061,12 +1122,12 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
             case VA_OBJECT_TYPE_MUTEX:
                 if (strstr(typeHint, "Mutex") == NULL)
                 {
-                    snprintf(descriptiveName, sizeof(descriptiveName), "%s_Mutex", typeHint);
+                    _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Mutex");
                     finalName = descriptiveName;
                 }
                 break;
             case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "RecMutex");
                 finalName = descriptiveName;
                 break;
             default:
@@ -1123,35 +1184,35 @@ void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
         case VA_OBJECT_TYPE_QUEUE:
             if (strstr(typeHint, "Queue") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_Queue", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Queue");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_MUTEX:
             if (strstr(typeHint, "Mutex") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_Mutex", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Mutex");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
             if (strstr(typeHint, "RecMutex") == NULL && strstr(typeHint, "RecursiveMutex") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "RecMutex");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_COUNTING_SEM:
             if (strstr(typeHint, "Sem") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_CountSem", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "CountSem");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_BINARY_SEM:
             if (strstr(typeHint, "Sem") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_BinSem", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "BinSem");
                 finalName = descriptiveName;
             }
             break;
@@ -1277,10 +1338,10 @@ void va_logQueueObjectBlocking(void *queueObject)
 }
 
 /* ================================================================
- *  User Function Event Logging
+ *  User Event Logging
  * ================================================================ */
 
-void VA_RegisterUserFunction(uint8_t id, const char *name)
+void VA_RegisterUserEvent(uint8_t id, const char *name)
 {
     VA_CS_ENTER();
     if (id == 0 || name == NULL)
@@ -1288,11 +1349,16 @@ void VA_RegisterUserFunction(uint8_t id, const char *name)
         VA_CS_EXIT();
         return;
     }
-    _va_assign_user_function_id(id, name);
+    _va_assign_user_event_id(id, name);
     VA_CS_EXIT();
 }
 
-void VA_LogUserEvent(uint8_t id, bool state)
+void VA_RegisterUserFunction(uint8_t id, const char *name)
+{
+    VA_RegisterUserEvent(id, name);
+}
+
+void VA_LogEvent(uint8_t id, bool state)
 {
     VA_CS_ENTER();
     if (id == 0)
@@ -1300,9 +1366,14 @@ void VA_LogUserEvent(uint8_t id, bool state)
         VA_CS_EXIT();
         return;
     }
-    uint8_t event_flags = (state == USER_EVENT_START) ? (VA_EVENT_FLAG_START_END | VA_EVENT_USER_FUNCTION) : VA_EVENT_USER_FUNCTION;
+    uint8_t event_flags = (state == USER_EVENT_START) ? (VA_EVENT_FLAG_START_END | VA_EVENT_USER_EVENT) : VA_EVENT_USER_EVENT;
     _va_send_event_packet(event_flags, id, _va_get_timestamp());
     VA_CS_EXIT();
+}
+
+void VA_LogUserEvent(uint8_t id, bool state)
+{
+    VA_LogEvent(id, state);
 }
 
 /* ================================================================
@@ -1348,11 +1419,11 @@ void VA_Init(uint32_t cpu_freq)
     next_queue_object_id = 1;
 #endif
 
-    for (int i = 0; i < VA_MAX_USER_FUNCTIONS; ++i)
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
     {
-        userFunctionMap[i].active = false;
-        userFunctionMap[i].id = 0;
-        userFunctionMap[i].name[0] = '\0';
+        userEventMap[i].active = false;
+        userEventMap[i].id = 0;
+        userEventMap[i].name[0] = '\0';
     }
 
     _va_enable_dwt_counter();
@@ -1378,7 +1449,7 @@ void VA_Init(uint32_t cpu_freq)
     _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
     char info_buf[40];
-    snprintf(info_buf, sizeof(info_buf), "CLK:%u", _va_cpu_freq);
+    _va_u32_to_str(info_buf, sizeof(info_buf), "CLK:", _va_cpu_freq);
     _va_send_setup_packet(VA_SETUP_INFO, 0, info_buf);
     _va_send_setup_packet(VA_SETUP_ISR_MAP, VA_ISR_ID_SYSTICK, "SysTick");
 #if (LOG_PENDSV == 1)

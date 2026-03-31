@@ -1,59 +1,146 @@
-### Ssample project config to enable ViewAlyzer
+# ViewAlyzerRecorder Zephyr
 
-```
-# GPIO for LED blinky
-CONFIG_GPIO=y
+Use the Zephyr integration when you want the recorder core packaged as a Zephyr module with Kconfig-controlled transport and tracing options.
 
-# Kernel features for ViewAlyzer integration
-CONFIG_MULTITHREADING=y
-CONFIG_NUM_PREEMPT_PRIORITIES=16
-CONFIG_SCHED_MULTIQ=y
+This path hooks Zephyr's tracing callbacks and emits native ViewAlyzer task, ISR, mutex, semaphore, queue, and sleep events without modifying Zephyr kernel sources.
 
-# Semaphores and Mutexes
-CONFIG_POLL=y
+## What the Zephyr Path Adds
 
-# Message queues and FIFOs
-CONFIG_HEAP_MEM_POOL_SIZE=8192
+On top of the core recorder APIs, the Zephyr adapter can trace:
 
-# Events
-CONFIG_EVENTS=y
+- thread creation
+- thread switch in and switch out
+- ISR enter and exit
+- mutex lock and unlock
+- semaphore give and take
+- message queue activity
+- sleep calls such as `k_sleep()`, `k_msleep()`, and `k_usleep()`
+- stack usage, when enabled
 
-# Thread stack sizes
-CONFIG_MAIN_STACK_SIZE=2048
-CONFIG_IDLE_STACK_SIZE=512
+## Files
 
-# Math library for sinf()
-CONFIG_NEWLIB_LIBC=y
+- `VA_Adapter_Zephyr.c` - Zephyr-specific adapter implementation
+- `VA_Adapter_Zephyr.h` - public Zephyr helper declarations
+- `tracing_user.h` - bridge that wires Zephyr tracing macros to the adapter
+- `Kconfig` - user-facing configuration options
+- `module.yml` - Zephyr module manifest
+- `CMakeLists.txt` - module build integration
 
-# Serial console for debug output
-CONFIG_SERIAL=y
-CONFIG_CONSOLE=y
-CONFIG_UART_CONSOLE=y
-CONFIG_PRINTK=y
+## How It Integrates
 
-# ViewAlyzer tracing via Zephyr module integration
+When `CONFIG_VIEWALYZER=y`, the module CMake file:
+
+- compiles `core/ViewAlyzer.c`
+- compiles `zephyr/VA_Adapter_Zephyr.c`
+- sets `VA_RTOS_SELECT=VA_RTOS_ZEPHYR`
+- maps the selected Zephyr transport option to `VA_TRANSPORT`
+- force-includes `zephyr/tracing_user.h`
+
+That means application code does not need to define `VA_RTOS_SELECT` manually when using the module.
+
+## prj.conf Example
+
+Use this as a starting point and trim it to what your app actually needs:
+
+```conf
 CONFIG_VIEWALYZER=y
-CONFIG_TRACING_USER=y
 
-# Transport selection is part of the ViewAlyzer module config.
-# Default is ITM/SWO unless overridden by a board-specific .conf.
+# Thread and ISR visibility
+CONFIG_VIEWALYZER_TRACE_THREADS=y
+CONFIG_VIEWALYZER_TRACE_ISRS=y
+
+# Synchronization and message-passing objects
+CONFIG_VIEWALYZER_TRACE_MUTEXES=y
+CONFIG_VIEWALYZER_TRACE_SEMAPHORES=y
+CONFIG_VIEWALYZER_TRACE_MESSAGE_QUEUES=y
+
+# Optional extras
+CONFIG_VIEWALYZER_TRACE_SLEEP=y
+CONFIG_VIEWALYZER_STACK_USAGE=y
+
+# Choose one transport
 CONFIG_VIEWALYZER_TRANSPORT_ITM=y
-
-# If using ITM/SWO, enable the Zephyr SWO log backend as needed.
-CONFIG_LOG=y
-CONFIG_LOG_BACKEND_SWO=y
-CONFIG_LOG_MODE_DEFERRED=y
-CONFIG_LOG_BACKEND_SWO_FREQ_HZ=2000000
-
-# If using SEGGER RTT instead, add 'segger' to the west manifest
-# name-allowlist and run `west update segger`, then select the RTT transport:
 # CONFIG_VIEWALYZER_TRANSPORT_RTT=y
-# CONFIG_VIEWALYZER_RTT_CHANNEL=0
-# CONFIG_VIEWALYZER_CONFIGURE_RTT=y
-# CONFIG_VIEWALYZER_RTT_BUFFER_SIZE=4096
 
-# For apps that build multiple boards with different transports, prefer
-# board-specific config fragments such as:
-#   boards/nucleo_g474re.conf -> CONFIG_VIEWALYZER_TRANSPORT_ITM=y
-#   boards/nucleo_f446re.conf -> CONFIG_VIEWALYZER_TRANSPORT_RTT=y
+# Helpful Zephyr features selected by the module or commonly used with it
+CONFIG_TRACING_USER=y
+CONFIG_THREAD_NAME=y
+CONFIG_THREAD_MONITOR=y
+CONFIG_THREAD_STACK_INFO=y
 ```
+
+If you use RTT instead of ITM/SWO, add the Zephyr `segger` module to your west manifest and update it before building.
+
+## Transport Notes
+
+### ITM/SWO
+
+Use `CONFIG_VIEWALYZER_TRANSPORT_ITM=y`.
+
+If you also want Zephyr log output over SWO, enable the relevant log backend separately. That is optional and independent from the recorder itself.
+
+### SEGGER RTT
+
+Use:
+
+```conf
+CONFIG_VIEWALYZER_TRANSPORT_RTT=y
+CONFIG_VIEWALYZER_RTT_CHANNEL=0
+CONFIG_VIEWALYZER_CONFIGURE_RTT=y
+CONFIG_VIEWALYZER_RTT_BUFFER_SIZE=4096
+```
+
+Disable `CONFIG_VIEWALYZER_CONFIGURE_RTT` if another part of your system owns RTT initialization.
+
+## Application Startup
+
+Your application still initializes the recorder explicitly:
+
+```c
+#include "ViewAlyzer.h"
+#include "VA_Adapter_Zephyr.h"
+
+void main(void)
+{
+	VA_Init(CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC);
+	VA_Zephyr_RegisterExistingThreads();
+
+	VA_RegisterUserTrace(1, "LoopTime", VA_USER_TYPE_GRAPH);
+}
+```
+
+`VA_Zephyr_RegisterExistingThreads()` is important if your system creates threads before `VA_Init()` runs. It emits setup packets for already-existing threads so the host can map thread IDs to names.
+
+## Board-Specific Configuration
+
+If different boards need different transports, keep the choice in board config fragments rather than in a single shared `prj.conf`.
+
+Example:
+
+```conf
+# boards/nucleo_g474re.conf
+CONFIG_VIEWALYZER_TRANSPORT_ITM=y
+```
+
+```conf
+# boards/nucleo_f446re.conf
+CONFIG_VIEWALYZER_TRANSPORT_RTT=y
+```
+
+## Manual User Traces Still Apply
+
+The Zephyr adapter handles scheduler and kernel-object events, but user instrumentation is still useful for application-specific detail:
+
+```c
+VA_RegisterUserEvent(1, "control_loop");
+
+VA_EVENT_START(1);
+control_loop();
+VA_EVENT_END(1);
+```
+
+## Related Docs
+
+- [../README.md](../README.md)
+- [../core/README.md](../core/README.md)
+- [../freertos/README.md](../freertos/README.md)

@@ -152,7 +152,7 @@ All packets are emitted through `_va_emit_packet()`. There are two categories:
 | `0x08` | Queue send/receive | — |
 | `0x09` | Stack Usage | stackUsed (4B) + stackTotal (4B) |
 | `0x0A` | User Toggle | state (1B) |
-| `0x0B` | User Function | — |
+| `0x0B` | User Event | — |
 | `0x0C` | Mutex Contention | waitingTaskID (1B) + holderTaskID (1B) |
 | `0x0D` | String Event | length (1B) + string (up to 200B) |
 | `0x0E` | Float Trace | IEEE 754 float (4B) |
@@ -177,7 +177,7 @@ The high bit (`0x80`) of the type byte is the **START/END flag**:
 | `0x73` | Semaphore Map |
 | `0x74` | Mutex Map |
 | `0x75` | Queue Map |
-| `0x76` | User Function Map |
+| `0x76` | User Event Map |
 | `0x77` | Config Flags |
 | `0x7F` | Info (e.g. `CLK:170000000`) |
 
@@ -187,7 +187,7 @@ The core maintains lookup tables that map opaque RTOS handles (`void*`) to compa
 
 - **taskMap[VA_MAX_TASKS]** — maps task/thread handles to IDs (default 16 slots)
 - **queueObjectMap[VA_MAX_SYNC_OBJECTS]** — maps queue/mutex/semaphore handles to IDs (default 32 slots)
-- **userFunctionMap[VA_MAX_USER_FUNCTIONS]** — maps user-function IDs to names (default 16 slots)
+- **userEventMap[VA_MAX_USER_EVENTS]** — maps user-event IDs to names (default 16 slots)
 
 Each pool is independently sized so you can tune RAM usage per your application:
 
@@ -195,7 +195,7 @@ Each pool is independently sized so you can tune RAM usage per your application:
 // In ViewAlyzer.h or your build system
 #define VA_MAX_TASKS          16  // RTOS task/thread slots (~40 bytes each)
 #define VA_MAX_SYNC_OBJECTS   32  // Mutexes, semaphores, queues
-#define VA_MAX_USER_FUNCTIONS 16  // User-profiled functions
+#define VA_MAX_USER_EVENTS   16  // User-profiled spans or events
 ```
 
 ### Critical Sections

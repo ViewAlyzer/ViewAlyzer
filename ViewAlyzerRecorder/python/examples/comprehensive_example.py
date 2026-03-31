@@ -65,7 +65,7 @@ def main():
     va.send_mutex_map(0, "SPI_Mutex")
     va.send_queue_map(0, "CmdQueue")
 
-    # User functions
+        # User events / spans
     va.send_function_map(0, "processFrame")
     va.send_function_map(1, "calibrate")
 
@@ -180,7 +180,7 @@ def main():
                     waiter = random.choice([t for t, _ in tasks if t != active_task])
                     va.send_mutex_contention(0, waiter, active_task, ts)
 
-                # User functions
+                # User event spans
                 if batch % 3 == 0:
                     func_id = 0 if batch < 5 else 1
                     va.send_function(func_id, is_entry=True, timestamp=ts)

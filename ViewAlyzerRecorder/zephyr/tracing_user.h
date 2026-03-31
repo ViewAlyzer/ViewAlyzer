@@ -131,19 +131,24 @@ void sys_trace_gpio_fire_callback_user(const struct device *port, struct gpio_ca
  *  tracing_user.c) so users never need to touch Zephyr sources.
  * ──────────────────────────────────────────────────────────────── */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_MUTEXES)
 void sys_trace_k_mutex_init(struct k_mutex *mutex, int ret);
 void sys_trace_k_mutex_lock_enter(struct k_mutex *mutex, k_timeout_t timeout);
 void sys_trace_k_mutex_lock_blocking(struct k_mutex *mutex, k_timeout_t timeout);
 void sys_trace_k_mutex_lock_exit(struct k_mutex *mutex, k_timeout_t timeout, int ret);
 void sys_trace_k_mutex_unlock_enter(struct k_mutex *mutex);
 void sys_trace_k_mutex_unlock_exit(struct k_mutex *mutex, int ret);
+#endif
 
+#if defined(CONFIG_VIEWALYZER_TRACE_SEMAPHORES)
 void sys_trace_k_sem_init(struct k_sem *sem, int ret);
 void sys_trace_k_sem_give_enter(struct k_sem *sem);
 void sys_trace_k_sem_take_enter(struct k_sem *sem, k_timeout_t timeout);
 void sys_trace_k_sem_take_blocking(struct k_sem *sem, k_timeout_t timeout);
 void sys_trace_k_sem_take_exit(struct k_sem *sem, k_timeout_t timeout, int ret);
+#endif
 
+#if defined(CONFIG_VIEWALYZER_TRACE_MESSAGE_QUEUES)
 void sys_trace_k_msgq_init(struct k_msgq *msgq);
 void sys_trace_k_msgq_put_enter(struct k_msgq *msgq, k_timeout_t timeout);
 void sys_trace_k_msgq_put_blocking(struct k_msgq *msgq, k_timeout_t timeout);
@@ -151,6 +156,16 @@ void sys_trace_k_msgq_put_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
 void sys_trace_k_msgq_get_enter(struct k_msgq *msgq, k_timeout_t timeout);
 void sys_trace_k_msgq_get_blocking(struct k_msgq *msgq, k_timeout_t timeout);
 void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret);
+#endif
+
+#if defined(CONFIG_VIEWALYZER_TRACE_SLEEP)
+void sys_trace_k_thread_sleep_enter(k_timeout_t timeout);
+void sys_trace_k_thread_sleep_exit(k_timeout_t timeout, int ret);
+void sys_trace_k_thread_msleep_enter(int32_t ms);
+void sys_trace_k_thread_msleep_exit(int32_t ms, int ret);
+void sys_trace_k_thread_usleep_enter(int32_t us);
+void sys_trace_k_thread_usleep_exit(int32_t us, int ret);
+#endif
 
 /* ══════════════════════════════════════════════════════════════
  *  sys_port_trace macros  (expanded by Zephyr kernel code)
@@ -168,12 +183,21 @@ void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
 #define sys_port_trace_k_thread_join_enter(thread, timeout)
 #define sys_port_trace_k_thread_join_blocking(thread, timeout)
 #define sys_port_trace_k_thread_join_exit(thread, timeout, ret)
+#if defined(CONFIG_VIEWALYZER_TRACE_SLEEP)
+#define sys_port_trace_k_thread_sleep_enter(timeout) sys_trace_k_thread_sleep_enter(timeout)
+#define sys_port_trace_k_thread_sleep_exit(timeout, ret) sys_trace_k_thread_sleep_exit(timeout, ret)
+#define sys_port_trace_k_thread_msleep_enter(ms) sys_trace_k_thread_msleep_enter(ms)
+#define sys_port_trace_k_thread_msleep_exit(ms, ret) sys_trace_k_thread_msleep_exit(ms, ret)
+#define sys_port_trace_k_thread_usleep_enter(us) sys_trace_k_thread_usleep_enter(us)
+#define sys_port_trace_k_thread_usleep_exit(us, ret) sys_trace_k_thread_usleep_exit(us, ret)
+#else
 #define sys_port_trace_k_thread_sleep_enter(timeout)
 #define sys_port_trace_k_thread_sleep_exit(timeout, ret)
 #define sys_port_trace_k_thread_msleep_enter(ms)
 #define sys_port_trace_k_thread_msleep_exit(ms, ret)
 #define sys_port_trace_k_thread_usleep_enter(us)
 #define sys_port_trace_k_thread_usleep_exit(us, ret)
+#endif
 #define sys_port_trace_k_thread_busy_wait_enter(usec_to_wait)
 #define sys_port_trace_k_thread_busy_wait_exit(usec_to_wait)
 #define sys_port_trace_k_thread_yield()
@@ -269,6 +293,7 @@ void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
 
 /* ── Semaphore (ViewAlyzer-wired) ───────────────────────────── */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_SEMAPHORES)
 #define sys_port_trace_k_sem_init(sem, ret) sys_trace_k_sem_init(sem, ret)
 #define sys_port_trace_k_sem_give_enter(sem) sys_trace_k_sem_give_enter(sem)
 #define sys_port_trace_k_sem_give_exit(sem)
@@ -276,15 +301,33 @@ void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
 #define sys_port_trace_k_sem_take_blocking(sem, timeout) sys_trace_k_sem_take_blocking(sem, timeout)
 #define sys_port_trace_k_sem_take_exit(sem, timeout, ret) sys_trace_k_sem_take_exit(sem, timeout, ret)
 #define sys_port_trace_k_sem_reset(sem)
+#else
+#define sys_port_trace_k_sem_init(sem, ret)
+#define sys_port_trace_k_sem_give_enter(sem)
+#define sys_port_trace_k_sem_give_exit(sem)
+#define sys_port_trace_k_sem_take_enter(sem, timeout)
+#define sys_port_trace_k_sem_take_blocking(sem, timeout)
+#define sys_port_trace_k_sem_take_exit(sem, timeout, ret)
+#define sys_port_trace_k_sem_reset(sem)
+#endif
 
 /* ── Mutex (ViewAlyzer-wired) ───────────────────────────────── */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_MUTEXES)
 #define sys_port_trace_k_mutex_init(mutex, ret) sys_trace_k_mutex_init(mutex, ret)
 #define sys_port_trace_k_mutex_lock_enter(mutex, timeout) sys_trace_k_mutex_lock_enter(mutex, timeout)
 #define sys_port_trace_k_mutex_lock_blocking(mutex, timeout) sys_trace_k_mutex_lock_blocking(mutex, timeout)
 #define sys_port_trace_k_mutex_lock_exit(mutex, timeout, ret) sys_trace_k_mutex_lock_exit(mutex, timeout, ret)
 #define sys_port_trace_k_mutex_unlock_enter(mutex) sys_trace_k_mutex_unlock_enter(mutex)
 #define sys_port_trace_k_mutex_unlock_exit(mutex, ret) sys_trace_k_mutex_unlock_exit(mutex, ret)
+#else
+#define sys_port_trace_k_mutex_init(mutex, ret)
+#define sys_port_trace_k_mutex_lock_enter(mutex, timeout)
+#define sys_port_trace_k_mutex_lock_blocking(mutex, timeout)
+#define sys_port_trace_k_mutex_lock_exit(mutex, timeout, ret)
+#define sys_port_trace_k_mutex_unlock_enter(mutex)
+#define sys_port_trace_k_mutex_unlock_exit(mutex, ret)
+#endif
 
 /* ── Condition variable ─────────────────────────────────────── */
 
@@ -376,6 +419,7 @@ void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
 
 /* ── Message queue (ViewAlyzer-wired) ───────────────────────── */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_MESSAGE_QUEUES)
 #define sys_port_trace_k_msgq_init(msgq) sys_trace_k_msgq_init(msgq)
 #define sys_port_trace_k_msgq_alloc_init_enter(msgq)
 #define sys_port_trace_k_msgq_alloc_init_exit(msgq, ret)
@@ -389,6 +433,21 @@ void sys_trace_k_msgq_get_exit(struct k_msgq *msgq, k_timeout_t timeout, int ret
 #define sys_port_trace_k_msgq_get_exit(msgq, timeout, ret) sys_trace_k_msgq_get_exit(msgq, timeout, ret)
 #define sys_port_trace_k_msgq_peek(msgq, ret)
 #define sys_port_trace_k_msgq_purge(msgq)
+#else
+#define sys_port_trace_k_msgq_init(msgq)
+#define sys_port_trace_k_msgq_alloc_init_enter(msgq)
+#define sys_port_trace_k_msgq_alloc_init_exit(msgq, ret)
+#define sys_port_trace_k_msgq_cleanup_enter(msgq)
+#define sys_port_trace_k_msgq_cleanup_exit(msgq, ret)
+#define sys_port_trace_k_msgq_put_enter(msgq, timeout)
+#define sys_port_trace_k_msgq_put_blocking(msgq, timeout)
+#define sys_port_trace_k_msgq_put_exit(msgq, timeout, ret)
+#define sys_port_trace_k_msgq_get_enter(msgq, timeout)
+#define sys_port_trace_k_msgq_get_blocking(msgq, timeout)
+#define sys_port_trace_k_msgq_get_exit(msgq, timeout, ret)
+#define sys_port_trace_k_msgq_peek(msgq, ret)
+#define sys_port_trace_k_msgq_purge(msgq)
+#endif
 
 /* ── Mailbox ────────────────────────────────────────────────── */
 

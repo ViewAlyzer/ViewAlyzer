@@ -199,6 +199,15 @@ __weak unsigned long getRunTimeCounterValue(void)
   // return DWT->CYCCNT; // If using DWT for run time stats
   return 0;
 }
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+  (void)xTask;
+  (void)pcTaskName;
+  taskDISABLE_INTERRUPTS();
+  //assembly break point for debugging
+__asm__ __volatile__ ("bkpt #0");  for (;;) {}
+}
 /* USER CODE END 1 */
 
 /**
@@ -254,25 +263,25 @@ void MX_FREERTOS_Init(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) using native FreeRTOS API */
-  xTaskCreate(StartDefaultTask, "DefaultTask", 128, NULL, tskIDLE_PRIORITY + 2, &defaultTaskHandle);
-  xTaskCreate(StartTask02, "SensorTask", 128, NULL, tskIDLE_PRIORITY + 1, &myTask02Handle);
-  xTaskCreate(StartTask03, "ProcessorTask", 128, NULL, tskIDLE_PRIORITY + 1, &myTask03Handle);
-  xTaskCreate(StartTask04, "NotifierTask", 128, NULL, tskIDLE_PRIORITY + 1, &myTask04Handle);
-  xTaskCreate(StartTask05, "StackTestTask", 256, NULL, tskIDLE_PRIORITY + 1, &myTask05Handle); // Larger stack for testing
-  xTaskCreate(StartTask06, "ConsumerTask", 128, NULL, tskIDLE_PRIORITY + 1, &myTask06Handle);
-  xTaskCreate(StartTask07, "WorkerTask", 128, NULL, tskIDLE_PRIORITY + 1, &myTask07Handle);
-  xTaskCreate(StartTask08, "CalculatorTask", 128, NULL, tskIDLE_PRIORITY + 1, &myTask08Handle);
-  xTaskCreate(WorkloadManagerTask, "WorkloadManager", 256, NULL, tskIDLE_PRIORITY + 3, &workloadManagerTaskHandle); // Higher priority
+  xTaskCreate(StartDefaultTask, "DefaultTask", 256, NULL, tskIDLE_PRIORITY + 2, &defaultTaskHandle);
+  xTaskCreate(StartTask02, "SensorTask", 256, NULL, tskIDLE_PRIORITY + 1, &myTask02Handle);
+  xTaskCreate(StartTask03, "ProcessorTask", 256, NULL, tskIDLE_PRIORITY + 1, &myTask03Handle);
+  xTaskCreate(StartTask04, "NotifierTask", 256, NULL, tskIDLE_PRIORITY + 1, &myTask04Handle);
+  xTaskCreate(StartTask05, "StackTestTask", 512, NULL, tskIDLE_PRIORITY + 1, &myTask05Handle); // Larger stack for VLA testing
+  xTaskCreate(StartTask06, "ConsumerTask", 256, NULL, tskIDLE_PRIORITY + 1, &myTask06Handle);
+  xTaskCreate(StartTask07, "WorkerTask", 256, NULL, tskIDLE_PRIORITY + 1, &myTask07Handle);
+  xTaskCreate(StartTask08, "CalculatorTask", 256, NULL, tskIDLE_PRIORITY + 1, &myTask08Handle);
+  xTaskCreate(WorkloadManagerTask, "WorkloadManager", 512, NULL, tskIDLE_PRIORITY + 3, &workloadManagerTaskHandle); // Higher priority
   
   // Contention test tasks with different priorities to showcase mutex contention tracking
-  xTaskCreate(ContentionHighPrioTask, "HighPrioTask", 128, NULL, tskIDLE_PRIORITY + 5, &contentionHighPrioTaskHandle); // Highest priority
-  xTaskCreate(ContentionMedPrioTask, "MedPrioTask", 128, NULL, tskIDLE_PRIORITY + 3, &contentionMedPrioTaskHandle);    // Medium priority
-  xTaskCreate(ContentionLowPrioTask, "LowPrioTask", 128, NULL, tskIDLE_PRIORITY + 1, &contentionLowPrioTaskHandle);    // Low priority
+  xTaskCreate(ContentionHighPrioTask, "HighPrioTask", 256, NULL, tskIDLE_PRIORITY + 5, &contentionHighPrioTaskHandle); // Highest priority
+  xTaskCreate(ContentionMedPrioTask, "MedPrioTask", 256, NULL, tskIDLE_PRIORITY + 3, &contentionMedPrioTaskHandle);    // Medium priority
+  xTaskCreate(ContentionLowPrioTask, "LowPrioTask", 256, NULL, tskIDLE_PRIORITY + 1, &contentionLowPrioTaskHandle);    // Low priority
 
   // Normal mutex tasks - different priorities but short critical sections, no priority inversion
-  xTaskCreate(NormalHighPrioTask, "NormalHigh", 128, NULL, tskIDLE_PRIORITY + 5, &normalHighPrioTaskHandle);
-  xTaskCreate(NormalMedPrioTask, "NormalMed", 128, NULL, tskIDLE_PRIORITY + 3, &normalMedPrioTaskHandle);
-  xTaskCreate(NormalLowPrioTask, "NormalLow", 128, NULL, tskIDLE_PRIORITY + 1, &normalLowPrioTaskHandle);
+  xTaskCreate(NormalHighPrioTask, "NormalHigh", 256, NULL, tskIDLE_PRIORITY + 5, &normalHighPrioTaskHandle);
+  xTaskCreate(NormalMedPrioTask, "NormalMed", 256, NULL, tskIDLE_PRIORITY + 3, &normalMedPrioTaskHandle);
+  xTaskCreate(NormalLowPrioTask, "NormalLow", 256, NULL, tskIDLE_PRIORITY + 1, &normalLowPrioTaskHandle);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -414,7 +423,7 @@ void StartTask03(void *argument)
         VA_LogTrace(46, receivedData.sensorValue);
       }
     }
-    
+    BSP_LED_Toggle(LED2); // Toggle LED to visualize activity
     // Also wait for notification from Task 4
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -634,9 +643,9 @@ void StartTask08(void *argument)
     // Wait for notification from Task04 (blocking with max delay)
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     
-    // Log function entry
+    // Log event start
     VA_LogToggle(44, TOGGLE_HIGH);
-    VA_LogUserEvent(45, USER_EVENT_START);
+    VA_LogEvent(45, USER_EVENT_START);
     
     // Get inverted sine value
     invertedSineVal = 200 - sineVal;
@@ -669,9 +678,9 @@ void StartTask08(void *argument)
       __NOP();
     }
 
-    // Log function exit
+    // Log event end
     VA_LogToggle(44, TOGGLE_LOW);
-    VA_LogUserEvent(45, USER_EVENT_END);
+    VA_LogEvent(45, USER_EVENT_END);
     
     vTaskDelay(pdMS_TO_TICKS(10)); // Use native FreeRTOS delay
   }
