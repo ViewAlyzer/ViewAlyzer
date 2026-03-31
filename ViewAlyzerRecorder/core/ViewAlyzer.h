@@ -124,8 +124,8 @@ extern "C"
 
 // Convenience Macros for User Function Timing
 #if (VA_ENABLED == 1)
-#define VA_FUNCTION_ENTRY(id) VA_LogUserEvent(id, USER_EVENT_IN)
-#define VA_FUNCTION_EXIT(id) VA_LogUserEvent(id, USER_EVENT_OUT)
+#define VA_FUNCTION_ENTRY(id) VA_LogUserEvent(id, USER_EVENT_START)
+#define VA_FUNCTION_EXIT(id) VA_LogUserEvent(id, USER_EVENT_END)
 #else
 #define VA_FUNCTION_ENTRY(id) ((void)0)
 #define VA_FUNCTION_EXIT(id) ((void)0)

@@ -31,7 +31,6 @@ extern "C"
 
 #include "VA_Internal.h"
 #include <string.h>
-#include <stdio.h>
 
 // Include RTT header only if needed
 #if VA_TRANSPORT_IS_JLINK
@@ -48,6 +47,42 @@ extern "C"
 #include "viewalyzer_cobs.h"
     static VA_TransportSendFn s_user_send_fn = NULL;
 #endif
+
+/* Lightweight uint32-to-decimal into a prefix buffer, e.g. "CLK:170000000" */
+static char *_va_u32_to_str(char *buf, size_t buf_size, const char *prefix, uint32_t val)
+{
+    size_t plen = strlen(prefix);
+    if (plen >= buf_size) { buf[0] = '\0'; return buf; }
+    memcpy(buf, prefix, plen);
+
+    char tmp[11]; /* max 10 digits for uint32 + NUL */
+    int i = (int)sizeof(tmp) - 1;
+    tmp[i] = '\0';
+    if (val == 0) { tmp[--i] = '0'; }
+    else { while (val) { tmp[--i] = '0' + (char)(val % 10); val /= 10; } }
+    const char *digits = &tmp[i];
+    size_t dlen = sizeof(tmp) - 1 - (size_t)i;
+
+    if (plen + dlen >= buf_size) dlen = buf_size - plen - 1;
+    memcpy(buf + plen, digits, dlen);
+    buf[plen + dlen] = '\0';
+    return buf;
+}
+
+/* Lightweight "name_Suffix" concatenation (replaces snprintf("%s_Suffix")) */
+static void _va_strcat_suffix(char *buf, size_t buf_size, const char *name, const char *suffix)
+{
+    size_t nlen = strlen(name);
+    size_t slen = strlen(suffix);
+    if (nlen + 1 + slen >= buf_size)
+        nlen = (nlen + 1 + slen >= buf_size && buf_size > slen + 2) ? buf_size - slen - 2 : nlen;
+    size_t pos = 0;
+    if (nlen > 0) { memcpy(buf, name, nlen); pos = nlen; }
+    buf[pos++] = '_';
+    size_t copy = (pos + slen < buf_size) ? slen : buf_size - pos - 1;
+    memcpy(buf + pos, suffix, copy);
+    buf[pos + copy] = '\0';
+}
 
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8M_BASE__)
 #define DWT_ENABLED 1
@@ -485,7 +520,7 @@ void VA_EmitSetupBundle(void)
     _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
     char info_buf[40];
-    snprintf(info_buf, sizeof(info_buf), "CLK:%u", _va_cpu_freq);
+    _va_u32_to_str(info_buf, sizeof(info_buf), "CLK:", _va_cpu_freq);
     _va_send_setup_packet(VA_SETUP_INFO, 0, info_buf);
 
 #if (VA_RTOS_SELECT == VA_RTOS_FREERTOS)
@@ -1087,12 +1122,12 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
             case VA_OBJECT_TYPE_MUTEX:
                 if (strstr(typeHint, "Mutex") == NULL)
                 {
-                    snprintf(descriptiveName, sizeof(descriptiveName), "%s_Mutex", typeHint);
+                    _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Mutex");
                     finalName = descriptiveName;
                 }
                 break;
             case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "RecMutex");
                 finalName = descriptiveName;
                 break;
             default:
@@ -1149,35 +1184,35 @@ void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
         case VA_OBJECT_TYPE_QUEUE:
             if (strstr(typeHint, "Queue") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_Queue", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Queue");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_MUTEX:
             if (strstr(typeHint, "Mutex") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_Mutex", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Mutex");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_RECURSIVE_MUTEX:
             if (strstr(typeHint, "RecMutex") == NULL && strstr(typeHint, "RecursiveMutex") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_RecMutex", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "RecMutex");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_COUNTING_SEM:
             if (strstr(typeHint, "Sem") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_CountSem", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "CountSem");
                 finalName = descriptiveName;
             }
             break;
         case VA_OBJECT_TYPE_BINARY_SEM:
             if (strstr(typeHint, "Sem") == NULL)
             {
-                snprintf(descriptiveName, sizeof(descriptiveName), "%s_BinSem", typeHint);
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "BinSem");
                 finalName = descriptiveName;
             }
             break;
@@ -1404,7 +1439,7 @@ void VA_Init(uint32_t cpu_freq)
     _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
     char info_buf[40];
-    snprintf(info_buf, sizeof(info_buf), "CLK:%u", _va_cpu_freq);
+    _va_u32_to_str(info_buf, sizeof(info_buf), "CLK:", _va_cpu_freq);
     _va_send_setup_packet(VA_SETUP_INFO, 0, info_buf);
     _va_send_setup_packet(VA_SETUP_ISR_MAP, VA_ISR_ID_SYSTICK, "SysTick");
 #if (LOG_PENDSV == 1)
