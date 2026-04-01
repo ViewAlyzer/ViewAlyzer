@@ -1,0 +1,321 @@
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/gpio.h>
+#include <math.h>
+#include "ViewAlyzer.h"
+#include "VA_Adapter_Zephyr.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define LED0_NODE DT_ALIAS(led0)
+
+static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+
+static void SWO_Init(uint32_t cpu_hz, uint32_t swo_baud, uint32_t port)
+{
+#ifdef DBGMCU_CR_TRACE_IOEN
+	DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN;
+#ifdef DBGMCU_CR_TRACE_MODE
+	DBGMCU->CR &= ~DBGMCU_CR_TRACE_MODE;
+#endif
+#endif
+
+	/* ARMv8-M (Cortex-M33) uses DCB instead of CoreDebug */
+#if __ARM_ARCH >= 8
+	DCB->DEMCR |= DCB_DEMCR_TRCENA_Msk;
+#else
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+#endif
+
+#ifdef ITM_LAR
+	ITM->LAR = 0xC5ACCE55;
+#endif
+	ITM->TCR = 0;
+	ITM->TPR = 0;
+	ITM->TER = 0;
+
+	uint32_t acpr = (swo_baud ? (cpu_hz / swo_baud) - 1u : 0u);
+	TPI->ACPR = acpr;
+	TPI->SPPR = 0x2;
+	TPI->FFCR = 0x100;
+	TPI->CSPSR = 1;
+
+	ITM->TER = (1u << port);
+	ITM->TCR = ITM_TCR_ITMENA_Msk;
+}
+
+/* ================================================================
+ *  Shared data & sync
+ * ================================================================ */
+
+static volatile uint16_t sine_index;
+
+static uint16_t get_next_sine_value(void)
+{
+	float radians = (sine_index * 2.0f * (float)M_PI) / 360.0f;
+	float s = sinf(radians);
+	uint16_t value = (uint16_t)((s + 1.0f) * 100.0f);
+	sine_index = (sine_index + 1) % 360;
+	return value;
+}
+
+typedef struct {
+	uint32_t sensorValue;
+	uint32_t timestamp;
+} SensorData_t;
+
+K_MSGQ_DEFINE(data_msgq, sizeof(SensorData_t), 5, 4);
+K_MUTEX_DEFINE(shared_mutex);
+K_MUTEX_DEFINE(contention_mutex);
+
+static volatile uint32_t sharedCounter;
+
+/* Priority inversion / contention counters */
+static volatile uint32_t lowPrioAccess;
+static volatile uint32_t highPrioAccess;
+
+/* Workload profiles — light values for visible variation without pegging CPU */
+#define NUM_TASKS 2
+static volatile uint32_t task_workloads[NUM_TASKS] = {200, 200};
+
+static const uint32_t workload_profiles[][NUM_TASKS] = {
+	{ 100,  400},   /* sensor light,  processor heavy */
+	{ 400,  100},   /* sensor heavy,  processor light */
+	{ 200,  200},   /* balanced */
+	{  50,   50},   /* both idle-ish */
+	{ 300,  300},   /* moderate */
+	{ 500,  150},   /* sensor busy */
+};
+#define NUM_PROFILES 6
+static volatile int current_profile;
+
+static volatile uint32_t tableCounter;
+
+static void do_some_work(void)
+{
+	VA_EVENT_START(1);
+
+	volatile uint32_t sum = 0;
+	for (volatile uint32_t i = 0; i < 5000; i++) {
+		sum += i;
+	}
+	(void)sum;
+
+	VA_EVENT_END(1);
+}
+
+/* ================================================================
+ *  Thread config
+ * ================================================================ */
+
+#if defined(CONFIG_SOC_STM32H503XX)
+#define DEFAULT_STACK  512
+#else
+#define DEFAULT_STACK  1024
+#endif
+
+#define PRIO_HIGHEST   2
+#define PRIO_HIGH      3
+#define PRIO_NORMAL    5
+#define PRIO_LOW       7
+
+/* ================================================================
+ *  Blink thread — LED heartbeat
+ * ================================================================ */
+
+static void blink_thread(void *p1, void *p2, void *p3)
+{
+	while (1) {
+		gpio_pin_toggle_dt(&led);
+		k_msleep(500);
+	}
+}
+
+K_THREAD_DEFINE(blink_tid, DEFAULT_STACK,
+		blink_thread, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
+
+/* ================================================================
+ *  SensorTask — sine wave, sends to queue, variable workload
+ * ================================================================ */
+
+static void sensor_task(void *p1, void *p2, void *p3)
+{
+	while (1) {
+		uint16_t val = get_next_sine_value();
+		VA_LogTrace(42, val);
+
+		float radians = (sine_index * 2.0f * (float)M_PI) / 360.0f;
+		VA_LogTraceFloat(60, sinf(radians));
+
+		SensorData_t sd = {
+			.sensorValue = val,
+			.timestamp   = k_uptime_get_32(),
+		};
+		k_msgq_put(&data_msgq, &sd, K_MSEC(10));
+
+		volatile uint32_t wl = task_workloads[0];
+		for (volatile uint32_t i = 0; i < wl; i++) {
+			__NOP();
+		}
+
+		k_msleep(20);
+	}
+}
+
+K_THREAD_DEFINE(sensor_tid, DEFAULT_STACK,
+		sensor_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
+
+/* ================================================================
+ *  ProcessorTask — drains queue, updates shared counter
+ * ================================================================ */
+
+static void processor_task(void *p1, void *p2, void *p3)
+{
+	SensorData_t rx;
+
+	while (1) {
+		if (k_msgq_get(&data_msgq, &rx, K_MSEC(200)) == 0) {
+			if (k_mutex_lock(&shared_mutex, K_MSEC(10)) == 0) {
+				sharedCounter++;
+				k_mutex_unlock(&shared_mutex);
+			}
+			VA_LogTrace(46, rx.sensorValue);
+		}
+
+		volatile uint32_t wl = task_workloads[1];
+		for (volatile uint32_t i = 0; i < wl; i++) {
+			__NOP();
+		}
+
+		k_msleep(50);
+	}
+}
+
+K_THREAD_DEFINE(processor_tid, DEFAULT_STACK,
+		processor_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
+
+/* ================================================================
+ *  WorkloadManager — cycles through profiles every 3 s
+ * ================================================================ */
+
+static void workload_manager_task(void *p1, void *p2, void *p3)
+{
+	while (1) {
+		k_msleep(3000);
+
+		current_profile = (current_profile + 1) % NUM_PROFILES;
+		for (int i = 0; i < NUM_TASKS; i++) {
+			task_workloads[i] = workload_profiles[current_profile][i];
+		}
+		VA_LogTrace(50, current_profile);
+	}
+}
+
+K_THREAD_DEFINE(wlmgr_tid, DEFAULT_STACK,
+		workload_manager_task, NULL, NULL, NULL,
+		PRIO_HIGH, 0, 0);
+
+/* ================================================================
+ *  Priority inversion demo — low prio holds mutex, high prio waits
+ * ================================================================ */
+
+static void contention_low_task(void *p1, void *p2, void *p3)
+{
+	while (1) {
+		if (k_mutex_lock(&contention_mutex, K_FOREVER) == 0) {
+			lowPrioAccess++;
+			VA_LogTrace(80, (int32_t)lowPrioAccess);
+
+			/* Hold mutex long enough to cause contention */
+			volatile uint32_t work = 0;
+			for (int i = 0; i < 20000; i++) {
+				work += i;
+			}
+			k_msleep(40);
+
+			k_mutex_unlock(&contention_mutex);
+		}
+
+		k_msleep(200);
+	}
+}
+
+static void contention_high_task(void *p1, void *p2, void *p3)
+{
+	k_msleep(30); /* offset so low-prio grabs mutex first */
+
+	while (1) {
+		int64_t start = k_uptime_get();
+
+		if (k_mutex_lock(&contention_mutex, K_MSEC(100)) == 0) {
+			int32_t waitMs = (int32_t)(k_uptime_get() - start);
+			highPrioAccess++;
+			VA_LogTrace(81, waitMs);
+
+			volatile uint32_t work = 0;
+			for (int i = 0; i < 5000; i++) {
+				work += i;
+			}
+
+			k_mutex_unlock(&contention_mutex);
+		} else {
+			VA_LogTrace(81, -1); /* timeout */
+		}
+
+		k_msleep(120);
+	}
+}
+
+K_THREAD_DEFINE(cont_low_tid, DEFAULT_STACK,
+		contention_low_task, NULL, NULL, NULL,
+		PRIO_LOW, 0, 0);
+
+K_THREAD_DEFINE(cont_high_tid, DEFAULT_STACK,
+		contention_high_task, NULL, NULL, NULL,
+		PRIO_HIGHEST, 0, 0);
+
+/* ================================================================
+ *  main()
+ * ================================================================ */
+
+int main(void)
+{
+	if (!gpio_is_ready_dt(&led)) {
+		return -1;
+	}
+	if (gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE) < 0) {
+		return -1;
+	}
+
+	//	SWO_Init(SystemCoreClock, 2000000u, 1);
+	k_msleep(3000);
+
+	VA_Init(SystemCoreClock);
+	// VA_Zephyr_RegisterExistingThreads();
+
+	VA_RegisterUserTrace(42, "Sine Value",       VA_USER_TYPE_GRAPH);
+	VA_RegisterUserTrace(46, "Processed Data",   VA_USER_TYPE_GRAPH);
+	VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_GRAPH);
+	VA_RegisterUserTrace(60, "Sine Float",       VA_USER_TYPE_GRAPH);
+
+	VA_RegisterUserTrace(70, "Core Clock",       VA_USER_TYPE_COUNTER);
+	VA_RegisterUserTrace(71, "Up Counter",       VA_USER_TYPE_TABLE);
+	VA_RegisterUserTrace(80, "Low Prio Hold",    VA_USER_TYPE_GRAPH);
+	VA_RegisterUserTrace(81, "High Prio Wait",   VA_USER_TYPE_GRAPH);
+	VA_RegisterUserEvent(1, "DoWork");
+
+	printk("ViewAlyzer initialized – streaming on SWO\n");
+
+	while (1) {
+		VA_LogTrace(70, (int32_t)SystemCoreClock);
+		VA_LogTrace(71, (int32_t)(tableCounter++));
+		do_some_work();
+		k_msleep(500);
+	}
+
+	return 0;
+}
