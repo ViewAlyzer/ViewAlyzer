@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "name": "Nucleo G474 FreeRTOS Demo",
+  "description": "ViewAlyzer example project: STM32 Nucleo-G474RE running FreeRTOS with multiple tasks, mutex contention, and user traces.",
+  "targetDevice": "STM32G474RE",
+  "transport": {
+    "type": "stlink_swo",
+    "cpuClockHz": 170000000,
+    "interface": "SWD",
+    "speedKHz": 4000,
+    "resetOnConnect": true,
+    "debugServer": "openocd",
+    "symbolPollingIntervalMs": 100,
+    "swoFreqHz": 2000000,
+    "itmPort": 1,
+    "stlinkGdbPort": 61234,
+    "stlinkSwoPort": 61235,
+    "targetDevice": "stm32g4x",
+    "openocdPath": "/media/eddie/Engineering/Projects/ViewAlyzer_Root/external/OpenOCD/src/openocd",
+    "openocdScriptsPath": "/media/eddie/Engineering/Projects/ViewAlyzer_Root/external/OpenOCD/tcl",
+    "armGdbPath": "/opt/st/stm32cubeclt_1.21.0/GNU-tools-for-STM32/bin/arm-none-eabi-gdb",
+    "framing": "none"
+  },
+  "protocol": {
+    "bigEndian": false,
+    "rtos": true,
+    "rtosType": "FreeRTOS",
+    "userTraces": [
+      {
+        "id": 42,
+        "name": "Sine Wave",
+        "type": "graph",
+        "scaleMin": 0.0,
+        "scaleMax": 200.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 43,
+        "name": "Tick Counter",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 44,
+        "name": "Task08 Toggle",
+        "type": "toggle",
+        "colour": "#808080"
+      },
+      {
+        "id": 46,
+        "name": "Processed Data",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 47,
+        "name": "Shared Counter",
+        "type": "counter",
+        "colour": "#808080"
+      },
+      {
+        "id": 48,
+        "name": "Protected Op",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 49,
+        "name": "Local Counter",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 50,
+        "name": "Workload Profile",
+        "type": "bar",
+        "scaleMin": 0.0,
+        "scaleMax": 8.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 51,
+        "name": "Low Prio Access",
+        "type": "counter",
+        "colour": "#808080"
+      },
+      {
+        "id": 52,
+        "name": "Med Prio Access",
+        "type": "counter",
+        "colour": "#808080"
+      },
+      {
+        "id": 53,
+        "name": "High Prio Wait",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 54,
+        "name": "Normal Shared (Low)",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 55,
+        "name": "Normal Shared (Med)",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 56,
+        "name": "Normal Shared (High)",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 60,
+        "name": "Sine Float",
+        "type": "graph",
+        "scaleMin": -1.0,
+        "scaleMax": 1.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 61,
+        "name": "Accumulator",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 62,
+        "name": "HiPrio Wait (ms)",
+        "type": "graph",
+        "scaleMin": 0.0,
+        "scaleMax": 100.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 63,
+        "name": "Inverted Sine",
+        "type": "graph",
+        "scaleMin": -1.0,
+        "scaleMax": 1.0,
+        "colour": "#808080"
+      }
+    ],
+    "userFunctions": [
+      {
+        "id": 45,
+        "name": "Custom Function"
+      }
+    ],
+    "tasks": [
+      {
+        "id": 1,
+        "name": "DefaultTask",
+        "priority": 2
+      },
+      {
+        "id": 2,
+        "name": "SensorTask",
+        "priority": 1
+      },
+      {
+        "id": 3,
+        "name": "ProcessorTask",
+        "priority": 1
+      },
+      {
+        "id": 4,
+        "name": "NotifierTask",
+        "priority": 1
+      },
+      {
+        "id": 5,
+        "name": "StackTestTask",
+        "priority": 1
+      },
+      {
+        "id": 6,
+        "name": "ConsumerTask",
+        "priority": 1
+      },
+      {
+        "id": 7,
+        "name": "WorkerTask",
+        "priority": 1
+      },
+      {
+        "id": 8,
+        "name": "CalculatorTask",
+        "priority": 1
+      },
+      {
+        "id": 9,
+        "name": "WorkloadManager",
+        "priority": 3
+      },
+      {
+        "id": 10,
+        "name": "HighPrioTask",
+        "priority": 5
+      },
+      {
+        "id": 11,
+        "name": "MedPrioTask",
+        "priority": 3
+      },
+      {
+        "id": 12,
+        "name": "LowPrioTask",
+        "priority": 1
+      },
+      {
+        "id": 13,
+        "name": "NormalHigh",
+        "priority": 5
+      },
+      {
+        "id": 14,
+        "name": "NormalMed",
+        "priority": 3
+      },
+      {
+        "id": 15,
+        "name": "NormalLow",
+        "priority": 1
+      }
+    ],
+    "isrs": [
+      {
+        "id": 1,
+        "name": "SysTick"
+      },
+      {
+        "id": 2,
+        "name": "PendSV"
+      }
+    ],
+    "syncObjects": [
+      {
+        "id": 1,
+        "name": "sharedResourceMutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 2,
+        "name": "printMutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 3,
+        "name": "contentionTestMutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 4,
+        "name": "normalOpMutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 5,
+        "name": "binarySemaphore",
+        "type": "queue"
+      },
+      {
+        "id": 6,
+        "name": "countingSemaphore",
+        "type": "counting_sem"
+      },
+      {
+        "id": 7,
+        "name": "dataQueue",
+        "type": "mutex"
+      },
+      {
+        "id": 8,
+        "name": "commandQueue",
+        "type": "mutex"
+      }
+    ]
+  }
+}

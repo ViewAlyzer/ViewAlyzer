@@ -417,7 +417,6 @@ CONFIG_VIEWALYZER_TRANSPORT_ITM=y
 int main(void)
 {
     VA_Init(SystemCoreClock);
-    VA_Zephyr_RegisterExistingThreads();
 
     VA_RegisterUserTrace(1, "Counter", VA_USER_TYPE_COUNTER);
 
