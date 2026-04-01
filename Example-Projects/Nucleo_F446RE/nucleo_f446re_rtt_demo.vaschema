@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "name": "Nucleo G474 Zephyr SWO Demo",
+  "description": "ViewAlyzer example project for the STM32 Nucleo-G474RE running the Zephyr demo over ST-LINK SWO/ITM with threads, sync objects, and user-function events aligned to the firmware.",
+  "targetDevice": "STM32F446RE",
+  "transport": {
+    "type": "jlink_rtt",
+    "cpuClockHz": 96000000,
+    "interface": "SWD",
+    "speedKHz": 4000,
+    "resetOnConnect": true,
+    "symbolPollingIntervalMs": 100,
+    "rttChannel": 1,
+    "rttPort": 19021,
+    "jlinkGdbPort": 2331,
+    "jlinkSwoPort": 2332,
+    "jlinkTelnetPort": 2333,
+    "targetDevice": "STM32F446RE",
+    "framing": "none"
+  },
+  "protocol": {
+    "bigEndian": false,
+    "rtos": true,
+    "rtosType": "Zephyr",
+    "userTraces": [
+      {
+        "id": 42,
+        "name": "Sine Value",
+        "type": "graph",
+        "scaleMin": 0.0,
+        "scaleMax": 200.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 43,
+        "name": "Tick Counter",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 44,
+        "name": "Calc Toggle",
+        "type": "toggle",
+        "colour": "#808080"
+      },
+      {
+        "id": 46,
+        "name": "Processed Data",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 47,
+        "name": "Shared Counter",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 48,
+        "name": "Protected Op",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 49,
+        "name": "Calc Shared",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 50,
+        "name": "Workload Profile",
+        "type": "graph",
+        "scaleMin": 0.0,
+        "scaleMax": 8.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 51,
+        "name": "Low Prio Access",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 52,
+        "name": "Med Prio Access",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 53,
+        "name": "High Prio Wait",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 54,
+        "name": "Normal Low",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 55,
+        "name": "Normal Med",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 56,
+        "name": "Normal High",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 60,
+        "name": "Sine Float",
+        "type": "graph",
+        "scaleMin": -1.0,
+        "scaleMax": 1.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 61,
+        "name": "Shared Accum",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 62,
+        "name": "HighPrio WaitF",
+        "type": "graph",
+        "scaleMin": 0.0,
+        "scaleMax": 100.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 63,
+        "name": "Inv Sine Float",
+        "type": "graph",
+        "scaleMin": -1.0,
+        "scaleMax": 1.0,
+        "colour": "#808080"
+      }
+    ],
+    "userFunctions": [
+      {
+        "id": 45,
+        "name": "Calc Event"
+      }
+    ],
+    "tasks": [
+      {
+        "id": 1,
+        "name": "blink_tid",
+        "priority": 5
+      },
+      {
+        "id": 2,
+        "name": "default_tid",
+        "priority": 3
+      },
+      {
+        "id": 3,
+        "name": "sensor_tid",
+        "priority": 5
+      },
+      {
+        "id": 4,
+        "name": "processor_tid",
+        "priority": 5
+      },
+      {
+        "id": 5,
+        "name": "notifier_tid",
+        "priority": 5
+      },
+      {
+        "id": 6,
+        "name": "stack_test_tid",
+        "priority": 5
+      },
+      {
+        "id": 7,
+        "name": "consumer_tid",
+        "priority": 5
+      },
+      {
+        "id": 8,
+        "name": "worker_tid",
+        "priority": 5
+      },
+      {
+        "id": 9,
+        "name": "calculator_tid",
+        "priority": 5
+      },
+      {
+        "id": 10,
+        "name": "wlmgr_tid",
+        "priority": 2
+      },
+      {
+        "id": 11,
+        "name": "cont_low_tid",
+        "priority": 7
+      },
+      {
+        "id": 12,
+        "name": "cont_med_tid",
+        "priority": 3
+      },
+      {
+        "id": 13,
+        "name": "cont_high_tid",
+        "priority": 2
+      },
+      {
+        "id": 14,
+        "name": "norm_low_tid",
+        "priority": 7
+      },
+      {
+        "id": 15,
+        "name": "norm_med_tid",
+        "priority": 3
+      },
+      {
+        "id": 16,
+        "name": "norm_high_tid",
+        "priority": 2
+      }
+    ],
+    "isrs": [
+      {
+        "id": 1,
+        "name": "SysTick"
+      },
+      {
+        "id": 2,
+        "name": "PendSV"
+      }
+    ],
+    "syncObjects": [
+      {
+        "id": 1,
+        "name": "data_msgq_Queue",
+        "type": "mutex"
+      },
+      {
+        "id": 2,
+        "name": "command_msgq_Queue",
+        "type": "mutex"
+      },
+      {
+        "id": 3,
+        "name": "shared_resource_mutex_Mutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 4,
+        "name": "print_mutex_Mutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 5,
+        "name": "contention_test_mutex_Mutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 6,
+        "name": "normal_op_mutex_Mutex",
+        "type": "binary_sem"
+      },
+      {
+        "id": 7,
+        "name": "binary_sem_BinSem",
+        "type": "queue"
+      },
+      {
+        "id": 8,
+        "name": "counting_sem_CountSem",
+        "type": "counting_sem"
+      },
+      {
+        "id": 9,
+        "name": "blink_sem_BinSem",
+        "type": "queue"
+      }
+    ]
+  }
+}

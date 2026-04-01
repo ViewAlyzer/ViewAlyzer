@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "name": "Nucleo H5 Zephyr SWO Demo",
+  "description": "ViewAlyzer schema for the STM32H5 Nucleo running the Zephyr demo over ST-LINK SWO/ITM with OpenOCD. Demonstrates graph, counter, table, and user-function event traces.",
+  "targetDevice": "STM32H5",
+  "transport": {
+    "type": "stlink_swo",
+    "cpuClockHz": 240000000,
+    "traceClockHz": 240000000,
+    "interface": "SWD",
+    "speedKHz": 4000,
+    "resetOnConnect": true,
+    "debugServer": "openocd",
+    "symbolPollingIntervalMs": 100,
+    "swoFreqHz": 1000000,
+    "itmPort": 1,
+    "stlinkGdbPort": 61234,
+    "stlinkSwoPort": 61235,
+    "targetDevice": "stm32h5x",
+    "openocdPath": "/media/eddie/Engineering/Projects/ViewAlyzer_Root/external/OpenOCD/src/openocd",
+    "openocdScriptsPath": "/media/eddie/Engineering/Projects/ViewAlyzer_Root/external/OpenOCD/tcl",
+    "armGdbPath": "/opt/st/stm32cubeclt_1.21.0/GNU-tools-for-STM32/bin/arm-none-eabi-gdb",
+    "framing": "none"
+  },
+  "protocol": {
+    "bigEndian": false,
+    "rtos": true,
+    "rtosType": "Zephyr",
+    "userTraces": [
+      {
+        "id": 42,
+        "name": "Sine Value",
+        "type": "graph",
+        "scaleMin": 0.0,
+        "scaleMax": 200.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 46,
+        "name": "Processed Data",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 50,
+        "name": "Workload Profile",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 60,
+        "name": "Sine Float",
+        "type": "graph",
+        "scaleMin": -1.0,
+        "scaleMax": 1.0,
+        "colour": "#808080"
+      },
+      {
+        "id": 70,
+        "name": "Core Clock",
+        "type": "counter",
+        "colour": "#808080"
+      },
+      {
+        "id": 71,
+        "name": "Up Counter",
+        "type": "table",
+        "colour": "#808080"
+      },
+      {
+        "id": 80,
+        "name": "Low Prio Hold",
+        "type": "graph",
+        "colour": "#808080"
+      },
+      {
+        "id": 81,
+        "name": "High Prio Wait",
+        "type": "graph",
+        "colour": "#808080"
+      }
+    ],
+    "userFunctions": [
+      {
+        "id": 1,
+        "name": "DoWork"
+      }
+    ],
+    "tasks": [
+      {
+        "id": 1,
+        "name": "blink_tid",
+        "priority": 5
+      },
+      {
+        "id": 2,
+        "name": "sensor_tid",
+        "priority": 5
+      },
+      {
+        "id": 3,
+        "name": "processor_tid",
+        "priority": 5
+      },
+      {
+        "id": 4,
+        "name": "wlmgr_tid",
+        "priority": 3
+      },
+      {
+        "id": 5,
+        "name": "cont_low_tid",
+        "priority": 7
+      },
+      {
+        "id": 6,
+        "name": "cont_high_tid",
+        "priority": 2
+      }
+    ],
+    "isrs": [
+      {
+        "id": 1,
+        "name": "SysTick"
+      },
+      {
+        "id": 2,
+        "name": "PendSV"
+      }
+    ],
+    "syncObjects": [
+      {
+        "id": 1,
+        "name": "data_msgq",
+        "type": "queue"
+      },
+      {
+        "id": 2,
+        "name": "shared_mutex",
+        "type": "mutex"
+      },
+      {
+        "id": 3,
+        "name": "contention_mutex",
+        "type": "mutex"
+      }
+    ]
+  }
+}
