@@ -1448,6 +1448,12 @@ void VA_Init(uint32_t cpu_freq)
 
     _va_emit_packet(VA_SYNC_MARKER, sizeof(VA_SYNC_MARKER));
 
+    /* Session-start marker — distinguishes a fresh VA_Init from periodic
+       auto-bundle re-emissions (VA_EmitSetupBundle).  The host uses this
+       to know that all subsequent data is from the current session, not
+       stale bytes left over in the RTT ring buffer from a previous run. */
+    _va_send_setup_packet(VA_SETUP_INFO, 0, "SES:START");
+
     char info_buf[40];
     _va_u32_to_str(info_buf, sizeof(info_buf), "CLK:", _va_cpu_freq);
     _va_send_setup_packet(VA_SETUP_INFO, 0, info_buf);
