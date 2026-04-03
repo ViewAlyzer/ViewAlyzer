@@ -295,7 +295,7 @@ int main(void)
 	k_msleep(3000);
 
 	VA_Init(SystemCoreClock);
-	// VA_Zephyr_RegisterExistingThreads();
+	//VA_Zephyr_RegisterExistingThreads();
 
 	VA_RegisterUserTrace(42, "Sine Value",       VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(46, "Processed Data",   VA_USER_TYPE_GRAPH);
@@ -308,7 +308,7 @@ int main(void)
 	VA_RegisterUserTrace(81, "High Prio Wait",   VA_USER_TYPE_GRAPH);
 	VA_RegisterUserEvent(1, "DoWork");
 
-	printk("ViewAlyzer initialized – streaming on SWO\n");
+	//printk("ViewAlyzer initialized – streaming on SWO\n");
 
 	while (1) {
 		VA_LogTrace(70, (int32_t)SystemCoreClock);

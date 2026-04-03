@@ -15,6 +15,7 @@ Usage:
     python3 build.py flash g4
     python3 build.py flash f4 jlink
     python3 build.py build h5
+    python3 build.py menuconfig g4
     python3 build.py flash h5
     python3 build.py debug g4 openocd
 """
@@ -503,6 +504,26 @@ def cmd_build(board_cfg: BoardConfig, pristine: bool = False):
     return subprocess.call(args, env=env, cwd=str(PROJECT_DIR))
 
 
+def cmd_menuconfig(board_cfg: BoardConfig):
+    env, host_tools = setup_env()
+    west = find_west(env)
+
+    args = west_build_args(board_cfg, west, False, host_tools)
+    # Insert -t menuconfig before the "--" separator so it's parsed by
+    # west, not forwarded to CMake.
+    try:
+        sep = args.index("--")
+        args[sep:sep] = ["-t", "menuconfig"]
+    except ValueError:
+        args.extend(["-t", "menuconfig"])
+
+    print(f"Opening menuconfig for {board_cfg.board} ({board_cfg.alias}) …")
+    print(f"  build dir = {board_cfg.build_dir}")
+    print()
+
+    return subprocess.call(args, env=env, cwd=str(PROJECT_DIR))
+
+
 def cmd_flash(board_cfg: BoardConfig, runner: str):
     rc = cmd_build(board_cfg)
     if rc != 0:
@@ -539,7 +560,7 @@ def parse_args() -> argparse.Namespace:
         "action",
         nargs="?",
         default="build",
-        choices=("build", "clean", "flash", "debug"),
+        choices=("build", "clean", "menuconfig", "flash", "debug"),
         help="operation to perform",
     )
     parser.add_argument(
@@ -565,6 +586,8 @@ def main():
             return cmd_build(board_cfg, pristine=False)
         if args.action == "clean":
             return cmd_build(board_cfg, pristine=True)
+        if args.action == "menuconfig":
+            return cmd_menuconfig(board_cfg)
         if args.action == "flash":
             runner = resolve_runner(args.runner, default=board_cfg.default_flash_runner)
             return cmd_flash(board_cfg, runner)

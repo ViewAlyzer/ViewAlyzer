@@ -216,6 +216,18 @@ west flash -d <build-dir> --skip-rebuild --runner openocd \
   --openocd-search <auto-detected-openocd-scripts>
 ```
 
+### Menuconfig
+
+Opens the Kconfig interactive configuration UI:
+
+```bash
+python3 build.py menuconfig g4
+python3 build.py menuconfig f4
+python3 build.py menuconfig h5
+```
+
+On Windows, you also need the `windows-curses` Python package installed.
+
 ## J-Link Notes
 
 - The J-Link runner requires the Python module `pylink` from the `pylink-square` package.

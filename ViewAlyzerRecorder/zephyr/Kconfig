@@ -83,10 +83,10 @@ config VIEWALYZER_MAX_TASKS
 	  Number of RTOS task or thread entries the recorder can track.
 
 config VIEWALYZER_MAX_USER_FUNCTIONS
-	int "Max user event slots"
+	int "Max user function slots"
 	default 16
 	help
-	  Number of user event or span IDs the recorder can store.
+	  Number of user-profiled function IDs the recorder can store.
 
 config VIEWALYZER_MAX_TASK_NAME_LEN
 	int "Max task name length"

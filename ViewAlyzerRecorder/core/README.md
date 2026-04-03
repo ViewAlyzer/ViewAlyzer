@@ -33,7 +33,7 @@ VA_RTOS_SELECT=VA_RTOS_NONE
 Then choose one transport:
 
 ```c
-VA_TRANSPORT=ST_LINK_ITM
+VA_TRANSPORT=ARM_ITM
 ```
 
 or:

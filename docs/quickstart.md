@@ -53,7 +53,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 Edit `VA_TRANSPORT` in `core/ViewAlyzer.h`:
 
 ```c
-#define VA_TRANSPORT ST_LINK_ITM    // ST-Link SWO
+#define VA_TRANSPORT ARM_ITM    // ARM ITM/SWO
 // #define VA_TRANSPORT JLINK_RTT   // J-Link RTT
 // #define VA_TRANSPORT CUSTOM_TRANSPORT  // UART, USB, etc.
 ```

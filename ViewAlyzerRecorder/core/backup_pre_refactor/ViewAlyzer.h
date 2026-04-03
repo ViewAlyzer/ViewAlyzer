@@ -39,11 +39,11 @@ extern "C"
 #define VA_TRACE_FREERTOS 0  // Can be defined in your build system to 0 to disable FreeRTOS tracing
 #endif
 
-#define ST_LINK_ITM        1u
+#define ARM_ITM            1u
 #define JLINK_RTT          2u
 #define CUSTOM_TRANSPORT   3u
 
-#define VA_TRANSPORT ST_LINK_ITM  // Select active transport backend
+#define VA_TRANSPORT ARM_ITM  // Select active transport backend
 #define LOG_PENDSV 0             // Experimental, unused
 
 #define VA_ITM_PORT    1         // ITM stimulus port where logs are sent when using ST-LINK transport
@@ -78,7 +78,7 @@ extern "C"
 **************************************************************/
 
 // --- Derived Configuration ---
-#define VA_TRANSPORT_IS_ST_LINK  ((VA_TRANSPORT) == ST_LINK_ITM)
+#define VA_TRANSPORT_IS_ITM      ((VA_TRANSPORT) == ARM_ITM)
 #define VA_TRANSPORT_IS_JLINK    ((VA_TRANSPORT) == JLINK_RTT)
 #define VA_TRANSPORT_IS_CUSTOM   ((VA_TRANSPORT) == CUSTOM_TRANSPORT)
 

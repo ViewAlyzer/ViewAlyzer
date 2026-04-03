@@ -125,7 +125,7 @@ void app_loop(void)
 
 The recorder core supports three transport modes through `VA_TRANSPORT`:
 
-- `ST_LINK_ITM` for ARM ITM/SWO
+- `ARM_ITM` for ARM ITM/SWO
 - `JLINK_RTT` for SEGGER RTT
 - `CUSTOM_TRANSPORT` for a user-supplied send callback
 

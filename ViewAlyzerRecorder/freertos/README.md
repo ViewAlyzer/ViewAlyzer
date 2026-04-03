@@ -35,7 +35,7 @@ VA_RTOS_SELECT=VA_RTOS_FREERTOS
 Then select a transport the same way you would for bare-metal:
 
 ```c
-VA_TRANSPORT=ST_LINK_ITM
+VA_TRANSPORT=ARM_ITM
 ```
 
 or:

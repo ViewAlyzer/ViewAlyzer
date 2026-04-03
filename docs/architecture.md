@@ -122,7 +122,7 @@ Three backends, selected at compile time by `VA_TRANSPORT`:
 
 | Backend | Macro | How it works |
 |---------|-------|-------------|
-| ST-Link ITM/SWO | `ST_LINK_ITM` | Writes to `ITM->PORT[n]` using 32-bit or 8-bit stimulus writes |
+| ARM ITM/SWO | `ARM_ITM` | Writes to `ITM->PORT[n]` using 32-bit or 8-bit stimulus writes |
 | J-Link RTT | `JLINK_RTT` | Writes to SEGGER RTT channel via `SEGGER_RTT_Write()` |
 | Custom | `CUSTOM_TRANSPORT` | User provides a send callback; data is COBS-framed before sending |
 

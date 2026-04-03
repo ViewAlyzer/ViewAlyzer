@@ -140,7 +140,7 @@ static void _va_strcat_suffix(char *buf, size_t buf_size, const char *name, cons
  *  Transport layer
  * ================================================================ */
 
-#if VA_TRANSPORT_IS_ST_LINK
+#if VA_TRANSPORT_IS_ITM
 #define ITM_WaitReady(port) while (ITM->PORT[port].u32 == 0)
 
 static inline void ITM_SendU32(uint8_t port, uint32_t value)
@@ -198,7 +198,7 @@ static void _va_send_bytes(const uint8_t *data, uint32_t length)
 }
 
 #else
-#error "VA_TRANSPORT must be ST_LINK_ITM, JLINK_RTT, or CUSTOM_TRANSPORT"
+#error "VA_TRANSPORT must be ARM_ITM, JLINK_RTT, or CUSTOM_TRANSPORT"
 #endif // VA_TRANSPORT
 
 /* ================================================================
@@ -1428,7 +1428,7 @@ void VA_Init(uint32_t cpu_freq)
 
     _va_enable_dwt_counter();
 
-#if VA_TRANSPORT_IS_ST_LINK
+#if VA_TRANSPORT_IS_ITM
     ITM->LAR = 0xC5ACCE55;
     ITM->TCR |= ITM_TCR_ITMENA_Msk;
     ITM->TER |= (1UL << VA_ITM_PORT);
