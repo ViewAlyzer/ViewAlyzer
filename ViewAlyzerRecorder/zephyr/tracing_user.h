@@ -167,6 +167,20 @@ void sys_trace_k_thread_usleep_enter(int32_t us);
 void sys_trace_k_thread_usleep_exit(int32_t us, int ret);
 #endif
 
+#if defined(CONFIG_VIEWALYZER_TRACE_TIMERS)
+void sys_trace_k_timer_init(struct k_timer *timer);
+void sys_trace_k_timer_start(struct k_timer *timer, k_timeout_t duration, k_timeout_t period);
+void sys_trace_k_timer_stop(struct k_timer *timer);
+void sys_trace_k_timer_status_sync_blocking(struct k_timer *timer, k_timeout_t timeout);
+#endif
+
+#if defined(CONFIG_VIEWALYZER_TRACE_HEAPS)
+void sys_trace_k_heap_init(struct k_heap *heap);
+void sys_trace_k_heap_alloc_exit_impl(struct k_heap *heap, uint32_t alloc_bytes, void *ret);
+void sys_trace_k_heap_free(struct k_heap *heap);
+void sys_trace_k_heap_alloc_blocking(struct k_heap *heap);
+#endif
+
 /* ══════════════════════════════════════════════════════════════
  *  sys_port_trace macros  (expanded by Zephyr kernel code)
  * ══════════════════════════════════════════════════════════════ */
@@ -495,6 +509,29 @@ void sys_trace_k_thread_usleep_exit(int32_t us, int ret);
 
 /* ── Heap / memory ──────────────────────────────────────────── */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_HEAPS)
+#define sys_port_trace_k_heap_init(heap) sys_trace_k_heap_init(heap)
+#define sys_port_trace_k_heap_aligned_alloc_enter(heap, timeout)
+#define sys_port_trace_k_heap_aligned_alloc_blocking(heap, timeout) sys_trace_k_heap_alloc_blocking(heap)
+#define sys_port_trace_k_heap_aligned_alloc_exit(heap, timeout, ret) sys_trace_k_heap_alloc_exit_impl(heap, (uint32_t)(bytes), ret)
+#define sys_port_trace_k_heap_alloc_enter(heap, timeout)
+#define sys_port_trace_k_heap_alloc_exit(heap, timeout, ret)
+#define sys_port_trace_k_heap_calloc_enter(heap, timeout)
+#define sys_port_trace_k_heap_calloc_exit(heap, timeout, ret)
+#define sys_port_trace_k_heap_free(heap) sys_trace_k_heap_free(heap)
+#define sys_port_trace_k_heap_realloc_enter(h, ptr, bytes, timeout)
+#define sys_port_trace_k_heap_realloc_exit(h, ptr, bytes, timeout, ret) sys_trace_k_heap_alloc_exit_impl(h, (uint32_t)(bytes), ret)
+#define sys_port_trace_k_heap_sys_k_aligned_alloc_enter(heap)
+#define sys_port_trace_k_heap_sys_k_aligned_alloc_exit(heap, ret)
+#define sys_port_trace_k_heap_sys_k_malloc_enter(heap)
+#define sys_port_trace_k_heap_sys_k_malloc_exit(heap, ret)
+#define sys_port_trace_k_heap_sys_k_free_enter(heap, heap_ref)
+#define sys_port_trace_k_heap_sys_k_free_exit(heap, heap_ref)
+#define sys_port_trace_k_heap_sys_k_calloc_enter(heap)
+#define sys_port_trace_k_heap_sys_k_calloc_exit(heap, ret)
+#define sys_port_trace_k_heap_sys_k_realloc_enter(heap, ptr)
+#define sys_port_trace_k_heap_sys_k_realloc_exit(heap, ptr, ret)
+#else
 #define sys_port_trace_k_heap_init(heap)
 #define sys_port_trace_k_heap_aligned_alloc_enter(heap, timeout)
 #define sys_port_trace_k_heap_aligned_alloc_blocking(heap, timeout)
@@ -516,6 +553,7 @@ void sys_trace_k_thread_usleep_exit(int32_t us, int ret);
 #define sys_port_trace_k_heap_sys_k_calloc_exit(heap, ret)
 #define sys_port_trace_k_heap_sys_k_realloc_enter(heap, ptr)
 #define sys_port_trace_k_heap_sys_k_realloc_exit(heap, ptr, ret)
+#endif
 
 /* ── Mem slab ───────────────────────────────────────────────── */
 
@@ -526,14 +564,23 @@ void sys_trace_k_thread_usleep_exit(int32_t us, int ret);
 #define sys_port_trace_k_mem_slab_free_enter(slab)
 #define sys_port_trace_k_mem_slab_free_exit(slab)
 
-/* ── Timer ──────────────────────────────────────────────────── */
+/* ── Timer (ViewAlyzer-wired) ───────────────────────────────── */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_TIMERS)
+#define sys_port_trace_k_timer_init(timer) sys_trace_k_timer_init(timer)
+#define sys_port_trace_k_timer_start(timer, duration, period) sys_trace_k_timer_start(timer, duration, period)
+#define sys_port_trace_k_timer_stop(timer) sys_trace_k_timer_stop(timer)
+#define sys_port_trace_k_timer_status_sync_enter(timer)
+#define sys_port_trace_k_timer_status_sync_blocking(timer, timeout) sys_trace_k_timer_status_sync_blocking(timer, timeout)
+#define sys_port_trace_k_timer_status_sync_exit(timer, result)
+#else
 #define sys_port_trace_k_timer_init(timer)
 #define sys_port_trace_k_timer_start(timer, duration, period)
 #define sys_port_trace_k_timer_stop(timer)
 #define sys_port_trace_k_timer_status_sync_enter(timer)
 #define sys_port_trace_k_timer_status_sync_blocking(timer, timeout)
 #define sys_port_trace_k_timer_status_sync_exit(timer, result)
+#endif
 
 /* ── Event ──────────────────────────────────────────────────── */
 

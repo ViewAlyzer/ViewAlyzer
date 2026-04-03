@@ -60,6 +60,35 @@ config VIEWALYZER_TRACE_SLEEP
 	  or k_usleep.  Allows the viewer to distinguish explicit sleep
 	  from generic OS/idle time.
 
+config VIEWALYZER_TRACE_TIMERS
+	bool "Trace kernel timers (k_timer)"
+	default y
+	select TRACING_TIMER
+	help
+	  Emit init/start/stop events when threads create, arm, or cancel
+	  kernel timers.  Allows the viewer to display timer lifecycle on
+	  the event table and timeline.
+
+config VIEWALYZER_TRACE_HEAPS
+	bool "Trace kernel heaps (k_heap alloc/free)"
+	default y
+	select TRACING_HEAP
+	help
+	  Emit alloc/free events for kernel heaps.  Allows the viewer to
+	  display allocation patterns, sizes, and potential memory leaks.
+
+config VIEWALYZER_HEAP_RUNTIME_STATS
+	bool "Send heap runtime statistics (allocated_bytes) in heap events"
+	default y
+	depends on VIEWALYZER_TRACE_HEAPS
+	select SYS_HEAP_RUNTIME_STATS
+	help
+	  When enabled, each heap alloc/free trace event carries the current
+	  total allocated_bytes from the Zephyr sys_heap runtime statistics
+	  instead of just the individual request size.  This lets ViewAlyzer
+	  show live heap usage, high-water marks, and inferred free sizes.
+	  Adds a small overhead per alloc/free to query heap stats.
+
 config VIEWALYZER_TRACE_MESSAGE_QUEUES
 	bool "Trace message queues"
 	default y

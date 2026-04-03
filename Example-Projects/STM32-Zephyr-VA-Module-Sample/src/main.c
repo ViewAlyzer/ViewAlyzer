@@ -55,6 +55,9 @@ K_SEM_DEFINE(binary_sem, 0, 1);          /* binary semaphore, starts empty */
 K_SEM_DEFINE(counting_sem, 0, 5);        /* counting semaphore, max 5 */
 K_SEM_DEFINE(blink_sem, 1, 1);           /* blink LED guard */
 
+/* Demo heap */
+K_HEAP_DEFINE(demo_heap, 2048);
+
 static void register_viewalyzer_sync_objects(void)
 {
 	va_logQueueObjectCreateWithType(&data_msgq, "data_msgq_Queue");
@@ -68,6 +71,20 @@ static void register_viewalyzer_sync_objects(void)
 	va_logQueueObjectCreateWithType(&binary_sem, "binary_sem_BinSem");
 	va_logQueueObjectCreateWithType(&counting_sem, "counting_sem_CountSem");
 	va_logQueueObjectCreateWithType(&blink_sem, "blink_sem_BinSem");
+
+	va_logQueueObjectCreateWithType(&demo_heap, "demo_heap_Heap");
+}
+
+/* ── Demo timer ─────────────────────────────────────────────── */
+static void heartbeat_timer_handler(struct k_timer *timer);
+K_TIMER_DEFINE(heartbeat_timer, heartbeat_timer_handler, NULL);
+static volatile uint32_t heartbeatCount;
+
+static void heartbeat_timer_handler(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+	heartbeatCount++;
+	VA_LogToggle(44, (heartbeatCount & 1) ? TOGGLE_HIGH : TOGGLE_LOW);
 }
 
 /* Shared resources protected by mutex */
@@ -336,7 +353,7 @@ K_THREAD_DEFINE(worker_tid, DEFAULT_STACK,
 static void calculator_task(void *p1, void *p2, void *p3)
 {
 	while (1) {
-		VA_LogToggle(44, TOGGLE_HIGH);
+		// VA_LogToggle(44, TOGGLE_HIGH);  /* moved to timer handler for debug */
 		VA_LogEvent(45, USER_EVENT_START);
 
 		uint16_t invertedSineVal = 200 - sineVal;
@@ -359,7 +376,7 @@ static void calculator_task(void *p1, void *p2, void *p3)
 			__NOP();
 		}
 
-		VA_LogToggle(44, TOGGLE_LOW);
+		// VA_LogToggle(44, TOGGLE_LOW);  /* moved to timer handler for debug */
 		VA_LogEvent(45, USER_EVENT_END);
 
 		k_msleep(10);
@@ -378,13 +395,20 @@ static void workload_manager_task(void *p1, void *p2, void *p3)
 
 	while (1) {
 		if (k_msgq_get(&command_msgq, &rxcmd, K_MSEC(100)) == 0) {
-			if (rxcmd.profileIndex < NUM_PROFILES) {
+			if (rxcmd.profileIndex < NUM_PROFILES
+			    && rxcmd.profileIndex != current_profile) {
 				current_profile = rxcmd.profileIndex;
 				for (int i = 0; i < NUM_TASKS_TO_MANAGE; i++) {
 					task_workloads[i] = workload_profiles[current_profile][i];
 				}
 				 VA_LogTrace(50, current_profile);
 				lastChange = k_uptime_get();
+
+				/* Cycle the heartbeat timer with new profile period */
+				k_timer_stop(&heartbeat_timer);
+				k_timer_start(&heartbeat_timer,
+					      K_MSEC(250 + current_profile * 100),
+					      K_MSEC(250 + current_profile * 100));
 			}
 		}
 
@@ -396,6 +420,12 @@ static void workload_manager_task(void *p1, void *p2, void *p3)
 			}
 			 VA_LogTrace(50, current_profile);
 			lastChange = k_uptime_get();
+
+			/* Cycle the heartbeat timer: stop then restart with varied period */
+			k_timer_stop(&heartbeat_timer);
+			k_timer_start(&heartbeat_timer,
+				      K_MSEC(250 + current_profile * 100),
+				      K_MSEC(250 + current_profile * 100));
 		}
 
 		k_msleep(100);
@@ -569,6 +599,35 @@ K_THREAD_DEFINE(norm_high_tid, DEFAULT_STACK,
 		PRIO_HIGHEST, 0, 0);
 
 
+/* ── Heap demo thread ───────────────────────────────────────── */
+static void heap_demo_thread(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+
+	/* Cycle through a few allocation sizes so the event table
+	   shows varying alloc amounts alongside free events. */
+	static const size_t sizes[] = { 64, 128, 256, 32, 512 };
+	int idx = 0;
+
+	while (1) {
+		size_t sz = sizes[idx % ARRAY_SIZE(sizes)];
+		void *ptr = k_heap_alloc(&demo_heap, sz, K_NO_WAIT);
+		if (ptr != NULL) {
+			/* Simulate brief use of the buffer */
+			memset(ptr, 0xAA, sz);
+			k_msleep(80);
+			k_heap_free(&demo_heap, ptr);
+		}
+		idx++;
+		k_msleep(300);
+	}
+}
+
+K_THREAD_DEFINE(heap_demo_tid, DEFAULT_STACK,
+		heap_demo_thread, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
+
+
 int main(void)
 {
 	int ret;
@@ -585,31 +644,34 @@ int main(void)
 	}
 
 
-	k_msleep(3000);                     /* give debugger time to attach */
+	k_msleep(1000);                     /* give debugger time to attach */
 
 	VA_Init(SystemCoreClock);
 
-	// No need to register is using a schema
-	VA_RegisterUserTrace(42, "Sine Value", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(44, "Calc Toggle", VA_USER_TYPE_TOGGLE);
-	VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(49, "Calc Shared", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_COUNTER);
-	VA_RegisterUserTrace(54, "Normal Low", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(55, "Normal Med", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(56, "Normal High", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(60, "Sine Float", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(61, "Shared Accum", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(62, "HighPrio WaitF", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(63, "Inv Sine Float", VA_USER_TYPE_GRAPH);
+	/* Start heartbeat timer — 500 ms period */
+	k_timer_start(&heartbeat_timer, K_MSEC(500), K_MSEC(500));
 
-	VA_RegisterUserEvent(45, "Calc Event");
+	// No need to register is using a schema
+	// VA_RegisterUserTrace(42, "Sine Value", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(44, "Calc Toggle", VA_USER_TYPE_TOGGLE);
+	// VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(49, "Calc Shared", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_COUNTER);
+	// VA_RegisterUserTrace(54, "Normal Low", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(55, "Normal Med", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(56, "Normal High", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(60, "Sine Float", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(61, "Shared Accum", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(62, "HighPrio WaitF", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(63, "Inv Sine Float", VA_USER_TYPE_GRAPH);
+
+	// VA_RegisterUserEvent(45, "Calc Event");
 
 
 

@@ -662,6 +662,10 @@ uint8_t _va_get_setup_packet_type(VA_QueueObjectType_t type)
     case VA_OBJECT_TYPE_COUNTING_SEM:
     case VA_OBJECT_TYPE_BINARY_SEM:
         return VA_SETUP_SEMAPHORE_MAP;
+    case VA_OBJECT_TYPE_TIMER:
+        return VA_SETUP_TIMER_MAP;
+    case VA_OBJECT_TYPE_HEAP:
+        return VA_SETUP_HEAP_MAP;
     default:
         return VA_SETUP_QUEUE_MAP;
     }
@@ -1172,6 +1176,10 @@ void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
             type = VA_OBJECT_TYPE_BINARY_SEM;
         else if (strstr(typeHint, "Semaphore") != NULL || strstr(typeHint, "Sem") != NULL)
             type = VA_OBJECT_TYPE_COUNTING_SEM;
+        else if (strstr(typeHint, "Timer") != NULL)
+            type = VA_OBJECT_TYPE_TIMER;
+        else if (strstr(typeHint, "Heap") != NULL)
+            type = VA_OBJECT_TYPE_HEAP;
     }
 
     char descriptiveName[VA_MAX_TASK_NAME_LEN];
@@ -1216,6 +1224,20 @@ void va_logQueueObjectCreateWithType(void *queueObject, const char *typeHint)
                 finalName = descriptiveName;
             }
             break;
+        case VA_OBJECT_TYPE_TIMER:
+            if (strstr(typeHint, "Timer") == NULL)
+            {
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Timer");
+                finalName = descriptiveName;
+            }
+            break;
+        case VA_OBJECT_TYPE_HEAP:
+            if (strstr(typeHint, "Heap") == NULL)
+            {
+                _va_strcat_suffix(descriptiveName, sizeof(descriptiveName), typeHint, "Heap");
+                finalName = descriptiveName;
+            }
+            break;
         default:
             break;
         }
@@ -1256,6 +1278,9 @@ void va_logQueueObjectGive(void *queueObject, uint32_t timeout)
     case VA_OBJECT_TYPE_BINARY_SEM:
         event_type = VA_EVENT_SEMAPHORE;
         break;
+    case VA_OBJECT_TYPE_TIMER:
+        event_type = VA_EVENT_TIMER;
+        break;
     case VA_OBJECT_TYPE_QUEUE:
     default:
         event_type = VA_EVENT_QUEUE;
@@ -1294,6 +1319,9 @@ void va_logQueueObjectTake(void *queueObject, uint32_t timeout)
     case VA_OBJECT_TYPE_COUNTING_SEM:
     case VA_OBJECT_TYPE_BINARY_SEM:
         event_type = VA_EVENT_SEMAPHORE;
+        break;
+    case VA_OBJECT_TYPE_TIMER:
+        event_type = VA_EVENT_TIMER;
         break;
     case VA_OBJECT_TYPE_QUEUE:
     default:
@@ -1334,6 +1362,52 @@ void va_logQueueObjectBlocking(void *queueObject)
     VA_CS_EXIT();
 #else
     VA_UNUSED(queueObject);
+#endif
+}
+
+/* ================================================================
+ *  Heap alloc / free tracing
+ * ================================================================ */
+
+void va_logHeapAlloc(void *heapObject, uint32_t allocBytes)
+{
+#if VA_HAS_RTOS
+    if (heapObject == NULL)
+        return;
+
+    VA_CS_ENTER();
+    uint8_t id = _va_find_queue_object_id(heapObject);
+    if (id == 0)
+    {
+        id = _va_assign_queue_object_id(heapObject, NULL, VA_OBJECT_TYPE_HEAP);
+    }
+    _va_send_data_event_packet(VA_EVENT_FLAG_START_END | VA_EVENT_HEAP_SYNC,
+                               id, allocBytes, _va_get_timestamp());
+    VA_CS_EXIT();
+#else
+    VA_UNUSED(heapObject);
+    VA_UNUSED(allocBytes);
+#endif
+}
+
+void va_logHeapFree(void *heapObject, uint32_t allocatedBytes)
+{
+#if VA_HAS_RTOS
+    if (heapObject == NULL)
+        return;
+
+    VA_CS_ENTER();
+    uint8_t id = _va_find_queue_object_id(heapObject);
+    if (id == 0)
+    {
+        id = _va_assign_queue_object_id(heapObject, NULL, VA_OBJECT_TYPE_HEAP);
+    }
+    _va_send_data_event_packet(VA_EVENT_HEAP_SYNC,
+                               id, allocatedBytes, _va_get_timestamp());
+    VA_CS_EXIT();
+#else
+    VA_UNUSED(heapObject);
+    VA_UNUSED(allocatedBytes);
 #endif
 }
 

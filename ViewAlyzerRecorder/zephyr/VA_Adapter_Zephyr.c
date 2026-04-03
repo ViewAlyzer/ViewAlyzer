@@ -28,6 +28,7 @@
 
 #include "VA_Internal.h"
 #include <zephyr/kernel.h>
+#include <zephyr/sys/sys_heap.h>
 #include <string.h>
 
 /* ================================================================
@@ -453,6 +454,105 @@ void sys_trace_k_thread_usleep_exit(int32_t us, int ret)
     if (!va_isnit())
         return;
     va_logSleepExit((void *)k_current_get());
+}
+#endif
+
+/* ================================================================
+ *  Timer tracing dispatch (k_timer init / start / stop)
+ * ================================================================ */
+
+#if defined(CONFIG_VIEWALYZER_TRACE_TIMERS)
+void sys_trace_k_timer_init(struct k_timer *timer)
+{
+    if (!va_isnit())
+        return;
+    va_zephyr_ensure_object_type((void *)timer, VA_OBJECT_TYPE_TIMER, "Timer");
+}
+
+void sys_trace_k_timer_start(struct k_timer *timer, k_timeout_t duration, k_timeout_t period)
+{
+    ARG_UNUSED(duration);
+    ARG_UNUSED(period);
+    if (!va_isnit())
+        return;
+    va_zephyr_ensure_object_type((void *)timer, VA_OBJECT_TYPE_TIMER, "Timer");
+    va_logQueueObjectGive((void *)timer, va_zephyr_timeout_to_ms(duration));
+}
+
+void sys_trace_k_timer_stop(struct k_timer *timer)
+{
+    if (!va_isnit())
+        return;
+    va_zephyr_ensure_object_type((void *)timer, VA_OBJECT_TYPE_TIMER, "Timer");
+    va_logQueueObjectTake((void *)timer, 0);
+}
+
+void sys_trace_k_timer_status_sync_blocking(struct k_timer *timer, k_timeout_t timeout)
+{
+    ARG_UNUSED(timeout);
+    if (!va_isnit())
+        return;
+    va_zephyr_ensure_object_type((void *)timer, VA_OBJECT_TYPE_TIMER, "Timer");
+    va_logQueueObjectBlocking((void *)timer);
+}
+#endif
+
+/* ================================================================
+ *  Heap tracing dispatch (k_heap init / alloc / free)
+ * ================================================================ */
+
+#if defined(CONFIG_VIEWALYZER_TRACE_HEAPS)
+void sys_trace_k_heap_init(struct k_heap *heap)
+{
+    if (!va_isnit())
+        return;
+    va_zephyr_ensure_object_type((void *)heap, VA_OBJECT_TYPE_HEAP, "Heap");
+}
+
+void sys_trace_k_heap_alloc_exit_impl(struct k_heap *heap, uint32_t alloc_bytes, void *ret)
+{
+    ARG_UNUSED(alloc_bytes);
+    ARG_UNUSED(ret);
+    if (!va_isnit())
+        return;
+    if (ret == NULL)
+        return;   /* allocation failed — nothing to report */
+    va_zephyr_ensure_object_type((void *)heap, VA_OBJECT_TYPE_HEAP, "Heap");
+
+#if defined(CONFIG_VIEWALYZER_HEAP_RUNTIME_STATS)
+    struct sys_memory_stats stats;
+    if (sys_heap_runtime_stats_get(&heap->heap, &stats) == 0)
+        va_logHeapAlloc((void *)heap, (uint32_t)stats.allocated_bytes);
+    else
+        va_logHeapAlloc((void *)heap, alloc_bytes);
+#else
+    va_logHeapAlloc((void *)heap, alloc_bytes);
+#endif
+}
+
+void sys_trace_k_heap_free(struct k_heap *heap)
+{
+    if (!va_isnit())
+        return;
+    va_zephyr_ensure_object_type((void *)heap, VA_OBJECT_TYPE_HEAP, "Heap");
+
+#if defined(CONFIG_VIEWALYZER_HEAP_RUNTIME_STATS)
+    struct sys_memory_stats stats;
+    if (sys_heap_runtime_stats_get(&heap->heap, &stats) == 0)
+        va_logHeapFree((void *)heap, (uint32_t)stats.allocated_bytes);
+    else
+        va_logHeapFree((void *)heap, 0);
+#else
+    va_logHeapFree((void *)heap, 0);
+#endif
+}
+
+void sys_trace_k_heap_alloc_blocking(struct k_heap *heap)
+{
+    if (!va_isnit())
+        return;
+    va_zephyr_ensure_object_type((void *)heap, VA_OBJECT_TYPE_HEAP, "Heap");
+    va_logQueueObjectBlocking((void *)heap);
 }
 #endif
 

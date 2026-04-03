@@ -231,6 +231,11 @@
         "id": 16,
         "name": "norm_high_tid",
         "priority": 2
+      },
+      {
+        "id": 17,
+        "name": "heap_demo_tid",
+        "priority": 5
       }
     ],
     "isrs": [

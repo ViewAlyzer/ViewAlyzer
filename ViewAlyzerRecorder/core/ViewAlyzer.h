@@ -186,6 +186,8 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_EVENT_COUNTER          0x10
 #define VA_EVENT_HEAP             0x11
 #define VA_EVENT_SLEEP            0x12
+#define VA_EVENT_TIMER            0x13
+#define VA_EVENT_HEAP_SYNC        0x14
 
 
 // --- Setup Message Codes ---
@@ -202,6 +204,8 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_SETUP_GPIO_MAP          0x78
 #define VA_SETUP_HEAP_INFO         0x79
 #define VA_SETUP_OS_INFO           0x7A
+#define VA_SETUP_TIMER_MAP         0x7B
+#define VA_SETUP_HEAP_MAP          0x7C
 
     typedef enum
     {
@@ -234,7 +238,9 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
         VA_OBJECT_TYPE_MUTEX           = 1,
         VA_OBJECT_TYPE_COUNTING_SEM    = 2,
         VA_OBJECT_TYPE_BINARY_SEM      = 3,
-        VA_OBJECT_TYPE_RECURSIVE_MUTEX = 4
+        VA_OBJECT_TYPE_RECURSIVE_MUTEX = 4,
+        VA_OBJECT_TYPE_TIMER           = 5,
+        VA_OBJECT_TYPE_HEAP            = 6
     } VA_QueueObjectType_t;
 
 // --- Static ISR IDs ---
@@ -294,6 +300,10 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     void va_logQueueObjectGive(void *queueObject, uint32_t timeout);
     void va_logQueueObjectTake(void *queueObject, uint32_t timeout);
     void va_logQueueObjectBlocking(void *queueObject);
+
+    // Heap alloc/free tracing (sends 14-byte data event with allocated_bytes from runtime stats)
+    void va_logHeapAlloc(void *heapObject, uint32_t allocBytes);
+    void va_logHeapFree(void *heapObject, uint32_t allocatedBytes);
 
     extern volatile uint32_t notificationValue;
 
@@ -359,6 +369,8 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define va_logQueueObjectGive(queueObject, timeout) ((void)0)
 #define va_logQueueObjectTake(queueObject, timeout) ((void)0)
 #define va_logQueueObjectBlocking(queueObject) ((void)0)
+#define va_logHeapAlloc(heapObject, allocBytes) ((void)0)
+#define va_logHeapFree(heapObject, allocatedBytes) ((void)0)
 #define va_logSleepEnter(h) ((void)0)
 #define va_logSleepExit(h) ((void)0)
 
