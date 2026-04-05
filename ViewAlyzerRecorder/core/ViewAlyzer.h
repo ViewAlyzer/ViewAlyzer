@@ -188,6 +188,7 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_EVENT_SLEEP            0x12
 #define VA_EVENT_TIMER            0x13
 #define VA_EVENT_HEAP_SYNC        0x14
+#define VA_EVENT_PM_SUSPEND       0x15
 
 
 // --- Setup Message Codes ---
@@ -206,6 +207,7 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
 #define VA_SETUP_OS_INFO           0x7A
 #define VA_SETUP_TIMER_MAP         0x7B
 #define VA_SETUP_HEAP_MAP          0x7C
+#define VA_SETUP_PM_MAP            0x7D
 
     typedef enum
     {
@@ -240,7 +242,8 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
         VA_OBJECT_TYPE_BINARY_SEM      = 3,
         VA_OBJECT_TYPE_RECURSIVE_MUTEX = 4,
         VA_OBJECT_TYPE_TIMER           = 5,
-        VA_OBJECT_TYPE_HEAP            = 6
+        VA_OBJECT_TYPE_HEAP            = 6,
+        VA_OBJECT_TYPE_POWER_MGMT      = 7
     } VA_QueueObjectType_t;
 
 // --- Static ISR IDs ---
@@ -275,6 +278,10 @@ typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
     /* ── Sleep tracing (Zephyr k_sleep / k_msleep / k_usleep) ── */
     void va_logSleepEnter(void *taskHandle);
     void va_logSleepExit(void *taskHandle);
+
+    /* ── PM tracing (Zephyr pm_system_suspend enter/exit) ── */
+    void va_logPMSuspendEnter(void);
+    void va_logPMSuspendExit(uint8_t state);
 
     void VA_RegisterGPIO(uint8_t id, const char *name);
     void VA_RegisterHeap(uint8_t id, const char *name, uint32_t totalSize);

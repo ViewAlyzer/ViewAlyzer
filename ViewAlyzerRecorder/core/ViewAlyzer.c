@@ -666,6 +666,8 @@ uint8_t _va_get_setup_packet_type(VA_QueueObjectType_t type)
         return VA_SETUP_TIMER_MAP;
     case VA_OBJECT_TYPE_HEAP:
         return VA_SETUP_HEAP_MAP;
+    case VA_OBJECT_TYPE_POWER_MGMT:
+        return VA_SETUP_PM_MAP;
     default:
         return VA_SETUP_QUEUE_MAP;
     }
@@ -993,6 +995,39 @@ void va_logSleepExit(void *taskHandle)
     VA_CS_EXIT();
 }
 
+/* ================================================================
+ *  PM (power management) suspend enter/exit
+ * ================================================================ */
+
+/* Sentinel handle used as the sync-object pointer for PM events.
+   Using a static variable's address guarantees a unique, stable value. */
+static uint8_t _va_pm_sentinel;
+
+void va_logPMSuspendEnter(void)
+{
+#if VA_HAS_RTOS
+    VA_CS_ENTER();
+    uint8_t id = _va_find_queue_object_id(&_va_pm_sentinel);
+    if (id == 0)
+        id = _va_assign_queue_object_id(&_va_pm_sentinel, "__va_pm__", VA_OBJECT_TYPE_POWER_MGMT);
+    if (id != 0)
+        _va_send_event_packet(VA_EVENT_FLAG_START_END | VA_EVENT_PM_SUSPEND, id, _va_get_timestamp());
+    VA_CS_EXIT();
+#endif
+}
+
+void va_logPMSuspendExit(uint8_t state)
+{
+#if VA_HAS_RTOS
+    (void)state;
+    VA_CS_ENTER();
+    uint8_t id = _va_find_queue_object_id(&_va_pm_sentinel);
+    if (id != 0)
+        _va_send_event_packet(VA_EVENT_PM_SUSPEND, id, _va_get_timestamp());
+    VA_CS_EXIT();
+#endif
+}
+
 void VA_RegisterGPIO(uint8_t id, const char *name)
 {
     VA_CS_ENTER();
@@ -1281,6 +1316,9 @@ void va_logQueueObjectGive(void *queueObject, uint32_t timeout)
     case VA_OBJECT_TYPE_TIMER:
         event_type = VA_EVENT_TIMER;
         break;
+    case VA_OBJECT_TYPE_POWER_MGMT:
+        event_type = VA_EVENT_PM_SUSPEND;
+        break;
     case VA_OBJECT_TYPE_QUEUE:
     default:
         event_type = VA_EVENT_QUEUE;
@@ -1322,6 +1360,9 @@ void va_logQueueObjectTake(void *queueObject, uint32_t timeout)
         break;
     case VA_OBJECT_TYPE_TIMER:
         event_type = VA_EVENT_TIMER;
+        break;
+    case VA_OBJECT_TYPE_POWER_MGMT:
+        event_type = VA_EVENT_PM_SUSPEND;
         break;
     case VA_OBJECT_TYPE_QUEUE:
     default:

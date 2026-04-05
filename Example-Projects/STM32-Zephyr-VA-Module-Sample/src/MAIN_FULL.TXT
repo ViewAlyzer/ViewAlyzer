@@ -10,42 +10,10 @@
 #endif
 
 #define LED0_NODE DT_ALIAS(led0)
-#define LED_BLINK_TIME_MS 100
+#define LED_BLINK_TIME_MS 50
 
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 
-/* ── SWO / ITM low-level init (same as Nucleo_G474_VA example) ── */
-// static void SWO_Init(uint32_t cpu_hz, uint32_t swo_baud, uint32_t port)
-// {
-// #ifdef DBGMCU_CR_TRACE_IOEN
-// 	DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN;
-// #ifdef DBGMCU_CR_TRACE_MODE
-// 	DBGMCU->CR &= ~DBGMCU_CR_TRACE_MODE;
-// #endif
-// #endif
-
-// 	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-
-// #ifdef ITM_LAR
-// 	ITM->LAR = 0xC5ACCE55;
-// #endif
-// 	ITM->TCR = 0;
-// 	ITM->TPR = 0;
-// 	ITM->TER = 0;
-
-// 	uint32_t acpr = (swo_baud ? (cpu_hz / swo_baud) - 1u : 0u);
-// 	TPI->ACPR = acpr;
-// 	TPI->SPPR = 0x2;           /* NRZ (UART) */
-// 	TPI->FFCR = 0x100;         /* disable continuous formatter */
-// 	TPI->CSPSR = 1;            /* port size = 1 bit */
-
-// 	ITM->TER = (1u << port);
-// 	ITM->TCR = ITM_TCR_ITMENA_Msk;
-// }
-
-/* ================================================================
- *  Shared data & sync objects
- * ================================================================ */
 
 /* Sine wave state */
 static volatile uint16_t sineVal;
@@ -87,6 +55,9 @@ K_SEM_DEFINE(binary_sem, 0, 1);          /* binary semaphore, starts empty */
 K_SEM_DEFINE(counting_sem, 0, 5);        /* counting semaphore, max 5 */
 K_SEM_DEFINE(blink_sem, 1, 1);           /* blink LED guard */
 
+/* Demo heap */
+K_HEAP_DEFINE(demo_heap, 2048);
+
 static void register_viewalyzer_sync_objects(void)
 {
 	va_logQueueObjectCreateWithType(&data_msgq, "data_msgq_Queue");
@@ -100,6 +71,20 @@ static void register_viewalyzer_sync_objects(void)
 	va_logQueueObjectCreateWithType(&binary_sem, "binary_sem_BinSem");
 	va_logQueueObjectCreateWithType(&counting_sem, "counting_sem_CountSem");
 	va_logQueueObjectCreateWithType(&blink_sem, "blink_sem_BinSem");
+
+	va_logQueueObjectCreateWithType(&demo_heap, "demo_heap_Heap");
+}
+
+/* ── Demo timer ─────────────────────────────────────────────── */
+static void heartbeat_timer_handler(struct k_timer *timer);
+K_TIMER_DEFINE(heartbeat_timer, heartbeat_timer_handler, NULL);
+static volatile uint32_t heartbeatCount;
+
+static void heartbeat_timer_handler(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+	heartbeatCount++;
+	VA_LogToggle(44, (heartbeatCount & 1) ? TOGGLE_HIGH : TOGGLE_LOW);
 }
 
 /* Shared resources protected by mutex */
@@ -132,9 +117,6 @@ static const uint32_t workload_profiles[][NUM_TASKS_TO_MANAGE] = {
 #define NUM_PROFILES 8
 static volatile int current_profile;
 
-/* ================================================================
- *  Thread stack sizes & priorities
- * ================================================================ */
 
 #if defined(CONFIG_SOC_STM32H503XX)
 /* STM32H503RB has only 32 KB SRAM — use reduced but safe stacks. */
@@ -151,9 +133,6 @@ static volatile int current_profile;
 #define PRIO_NORMAL      5
 #define PRIO_LOW         7
 
-/* ================================================================
- *  Blink thread (the original blinky — kept as-is)
- * ================================================================ */
 
 static void blink_thread(void *p1, void *p2, void *p3)
 {
@@ -169,9 +148,6 @@ K_THREAD_DEFINE(blink_tid, DEFAULT_STACK,
 		blink_thread, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  DefaultTask — releases semaphores, sends commands (prio 3)
- * ================================================================ */
 
 static void default_task(void *p1, void *p2, void *p3)
 {
@@ -200,9 +176,6 @@ K_THREAD_DEFINE(default_tid, DEFAULT_STACK,
 		default_task, NULL, NULL, NULL,
 		PRIO_HIGH, 0, 0);
 
-/* ================================================================
- *  SensorTask — generates sine wave data, sends to queue (prio 5)
- * ================================================================ */
 
 static void sensor_task(void *p1, void *p2, void *p3)
 {
@@ -235,9 +208,6 @@ K_THREAD_DEFINE(sensor_tid, DEFAULT_STACK,
 		sensor_task, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  ProcessorTask — receives from queue, updates shared data (prio 5)
- * ================================================================ */
 
 static void processor_task(void *p1, void *p2, void *p3)
 {
@@ -262,9 +232,6 @@ K_THREAD_DEFINE(processor_tid, DEFAULT_STACK,
 		processor_task, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  NotifierTask — wakes other threads periodically (prio 5)
- * ================================================================ */
 
 /* Forward-declare thread IDs for notification targets */
 extern const k_tid_t calculator_tid;
@@ -282,9 +249,6 @@ K_THREAD_DEFINE(notifier_tid, DEFAULT_STACK,
 		notifier_task, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  StackTestTask — variable stack usage (prio 5)
- * ================================================================ */
 
 static void stack_test_task(void *p1, void *p2, void *p3)
 {
@@ -335,9 +299,6 @@ K_THREAD_DEFINE(stack_test_tid, LARGE_STACK,
 		stack_test_task, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  ConsumerTask — waits on binary + counting semaphore (prio 5)
- * ================================================================ */
 
 static void consumer_task(void *p1, void *p2, void *p3)
 {
@@ -364,9 +325,6 @@ K_THREAD_DEFINE(consumer_tid, DEFAULT_STACK,
 		consumer_task, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  WorkerTask — uses print mutex (prio 5)
- * ================================================================ */
 
 static void worker_task(void *p1, void *p2, void *p3)
 {
@@ -391,14 +349,11 @@ K_THREAD_DEFINE(worker_tid, DEFAULT_STACK,
 		worker_task, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  CalculatorTask — uses shared resource, workload (prio 5)
- * ================================================================ */
 
 static void calculator_task(void *p1, void *p2, void *p3)
 {
 	while (1) {
-		VA_LogToggle(44, TOGGLE_HIGH);
+		// VA_LogToggle(44, TOGGLE_HIGH);  /* moved to timer handler for debug */
 		VA_LogEvent(45, USER_EVENT_START);
 
 		uint16_t invertedSineVal = 200 - sineVal;
@@ -421,7 +376,7 @@ static void calculator_task(void *p1, void *p2, void *p3)
 			__NOP();
 		}
 
-		VA_LogToggle(44, TOGGLE_LOW);
+		// VA_LogToggle(44, TOGGLE_LOW);  /* moved to timer handler for debug */
 		VA_LogEvent(45, USER_EVENT_END);
 
 		k_msleep(10);
@@ -432,9 +387,6 @@ K_THREAD_DEFINE(calculator_tid, DEFAULT_STACK,
 		calculator_task, NULL, NULL, NULL,
 		PRIO_NORMAL, 0, 0);
 
-/* ================================================================
- *  WorkloadManagerTask — switches workload profiles (prio 2)
- * ================================================================ */
 
 static void workload_manager_task(void *p1, void *p2, void *p3)
 {
@@ -443,13 +395,20 @@ static void workload_manager_task(void *p1, void *p2, void *p3)
 
 	while (1) {
 		if (k_msgq_get(&command_msgq, &rxcmd, K_MSEC(100)) == 0) {
-			if (rxcmd.profileIndex < NUM_PROFILES) {
+			if (rxcmd.profileIndex < NUM_PROFILES
+			    && rxcmd.profileIndex != current_profile) {
 				current_profile = rxcmd.profileIndex;
 				for (int i = 0; i < NUM_TASKS_TO_MANAGE; i++) {
 					task_workloads[i] = workload_profiles[current_profile][i];
 				}
 				 VA_LogTrace(50, current_profile);
 				lastChange = k_uptime_get();
+
+				/* Cycle the heartbeat timer with new profile period */
+				k_timer_stop(&heartbeat_timer);
+				k_timer_start(&heartbeat_timer,
+					      K_MSEC(250 + current_profile * 100),
+					      K_MSEC(250 + current_profile * 100));
 			}
 		}
 
@@ -461,6 +420,12 @@ static void workload_manager_task(void *p1, void *p2, void *p3)
 			}
 			 VA_LogTrace(50, current_profile);
 			lastChange = k_uptime_get();
+
+			/* Cycle the heartbeat timer: stop then restart with varied period */
+			k_timer_stop(&heartbeat_timer);
+			k_timer_start(&heartbeat_timer,
+				      K_MSEC(250 + current_profile * 100),
+				      K_MSEC(250 + current_profile * 100));
 		}
 
 		k_msleep(100);
@@ -471,10 +436,6 @@ K_THREAD_DEFINE(wlmgr_tid, DEFAULT_STACK,
 		workload_manager_task, NULL, NULL, NULL,
 		PRIO_HIGHEST, 0, 0);
 
-/* ================================================================
- *  Contention test tasks — mutex held for extended periods
- *  (mirrors the FreeRTOS ContentionHighPrio/Med/Low tasks)
- * ================================================================ */
 
 static void contention_low_task(void *p1, void *p2, void *p3)
 {
@@ -566,10 +527,6 @@ K_THREAD_DEFINE(cont_high_tid, DEFAULT_STACK,
 		contention_high_task, NULL, NULL, NULL,
 		PRIO_HIGHEST, 0, 0);
 
-/* ================================================================
- *  Normal mutex tasks — short critical sections, no inversion
- *  (mirrors FreeRTOS NormalHigh/Med/Low tasks)
- * ================================================================ */
 
 static void normal_low_task(void *p1, void *p2, void *p3)
 {
@@ -641,9 +598,36 @@ K_THREAD_DEFINE(norm_high_tid, DEFAULT_STACK,
 		normal_high_task, NULL, NULL, NULL,
 		PRIO_HIGHEST, 0, 0);
 
-/* ================================================================
- *  main() — ViewAlyzer init, register traces
- * ================================================================ */
+
+/* ── Heap demo thread ───────────────────────────────────────── */
+static void heap_demo_thread(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+
+	/* Cycle through a few allocation sizes so the event table
+	   shows varying alloc amounts alongside free events. */
+	static const size_t sizes[] = { 64, 128, 256, 32, 512 };
+	int idx = 0;
+
+	while (1) {
+		size_t sz = sizes[idx % ARRAY_SIZE(sizes)];
+		void *ptr = k_heap_alloc(&demo_heap, sz, K_NO_WAIT);
+		if (ptr != NULL) {
+			/* Simulate brief use of the buffer */
+			memset(ptr, 0xAA, sz);
+			k_msleep(80);
+			k_heap_free(&demo_heap, ptr);
+		}
+		idx++;
+		k_msleep(300);
+	}
+}
+
+K_THREAD_DEFINE(heap_demo_tid, DEFAULT_STACK,
+		heap_demo_thread, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
+
+
 int main(void)
 {
 	int ret;
@@ -660,31 +644,34 @@ int main(void)
 	}
 
 
-	k_msleep(3000);                     /* give debugger time to attach */
+	k_msleep(1000);                     /* give debugger time to attach */
 
 	VA_Init(SystemCoreClock);
 
-	/* Register user traces (same IDs as FreeRTOS example) */
-	VA_RegisterUserTrace(42, "Sine Value", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(44, "Calc Toggle", VA_USER_TYPE_TOGGLE);
-	VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(49, "Calc Shared", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_COUNTER);
-	VA_RegisterUserTrace(54, "Normal Low", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(55, "Normal Med", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(56, "Normal High", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(60, "Sine Float", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(61, "Shared Accum", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(62, "HighPrio WaitF", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(63, "Inv Sine Float", VA_USER_TYPE_GRAPH);
+	/* Start heartbeat timer — 500 ms period */
+	k_timer_start(&heartbeat_timer, K_MSEC(500), K_MSEC(500));
 
-	VA_RegisterUserEvent(45, "Calc Event");
+	// No need to register is using a schema
+	// VA_RegisterUserTrace(42, "Sine Value", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(44, "Calc Toggle", VA_USER_TYPE_TOGGLE);
+	// VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(49, "Calc Shared", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_COUNTER);
+	// VA_RegisterUserTrace(54, "Normal Low", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(55, "Normal Med", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(56, "Normal High", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(60, "Sine Float", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(61, "Shared Accum", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(62, "HighPrio WaitF", VA_USER_TYPE_GRAPH);
+	// VA_RegisterUserTrace(63, "Inv Sine Float", VA_USER_TYPE_GRAPH);
+
+	// VA_RegisterUserEvent(45, "Calc Event");
 
 
 

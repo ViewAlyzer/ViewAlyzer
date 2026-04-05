@@ -556,4 +556,26 @@ void sys_trace_k_heap_alloc_blocking(struct k_heap *heap)
 }
 #endif
 
+/* ================================================================
+ *  PM tracing dispatch (pm_system_suspend enter / exit)
+ * ================================================================ */
+
+#if defined(CONFIG_VIEWALYZER_TRACE_PM)
+void sys_trace_va_pm_system_suspend_enter(uint32_t ticks)
+{
+    ARG_UNUSED(ticks);
+    if (!va_isnit())
+        return;
+    va_logPMSuspendEnter();
+}
+
+void sys_trace_va_pm_system_suspend_exit(uint32_t ticks, uint8_t state)
+{
+    ARG_UNUSED(ticks);
+    if (!va_isnit())
+        return;
+    va_logPMSuspendExit(state);
+}
+#endif
+
 #endif /* VA_ENABLED && VA_RTOS_ZEPHYR */

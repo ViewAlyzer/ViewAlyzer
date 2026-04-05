@@ -77,6 +77,16 @@ config VIEWALYZER_TRACE_HEAPS
 	  Emit alloc/free events for kernel heaps.  Allows the viewer to
 	  display allocation patterns, sizes, and potential memory leaks.
 
+config VIEWALYZER_TRACE_PM
+	bool "Trace power management suspend/resume"
+	default y
+	depends on PM
+	help
+	  Emit enter/exit events when the system enters or exits a low-power
+	  state via pm_system_suspend.  Requires CONFIG_PM to be enabled.
+	  Allows the viewer to display low-power periods in the event table
+	  and timeline.
+
 config VIEWALYZER_HEAP_RUNTIME_STATS
 	bool "Send heap runtime statistics (allocated_bytes) in heap events"
 	default y

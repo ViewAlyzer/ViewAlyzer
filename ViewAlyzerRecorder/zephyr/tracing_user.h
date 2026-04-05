@@ -181,6 +181,11 @@ void sys_trace_k_heap_free(struct k_heap *heap);
 void sys_trace_k_heap_alloc_blocking(struct k_heap *heap);
 #endif
 
+#if defined(CONFIG_VIEWALYZER_TRACE_PM)
+void sys_trace_va_pm_system_suspend_enter(uint32_t ticks);
+void sys_trace_va_pm_system_suspend_exit(uint32_t ticks, uint8_t state);
+#endif
+
 /* ══════════════════════════════════════════════════════════════
  *  sys_port_trace macros  (expanded by Zephyr kernel code)
  * ══════════════════════════════════════════════════════════════ */
@@ -597,8 +602,15 @@ void sys_trace_k_heap_alloc_blocking(struct k_heap *heap);
 
 /* ── Power management ───────────────────────────────────────── */
 
+#if defined(CONFIG_VIEWALYZER_TRACE_PM)
+#define sys_port_trace_pm_system_suspend_enter(ticks) \
+    sys_trace_va_pm_system_suspend_enter(ticks)
+#define sys_port_trace_pm_system_suspend_exit(ticks, state) \
+    sys_trace_va_pm_system_suspend_exit(ticks, state)
+#else
 #define sys_port_trace_pm_system_suspend_enter(ticks)
 #define sys_port_trace_pm_system_suspend_exit(ticks, state)
+#endif
 
 #define sys_port_trace_pm_device_runtime_get_enter(dev)
 #define sys_port_trace_pm_device_runtime_get_exit(dev, ret)
