@@ -144,9 +144,9 @@ static void blink_thread(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(blink_tid, DEFAULT_STACK,
-// 		blink_thread, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(blink_tid, DEFAULT_STACK,
+		blink_thread, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 static void default_task(void *p1, void *p2, void *p3)
@@ -168,7 +168,7 @@ static void default_task(void *p1, void *p2, void *p3)
 		};
 		k_msgq_put(&command_msgq, &cmd, K_NO_WAIT);
 
-		k_msleep(500);
+		k_msleep(20);
 	}
 }
 
@@ -194,7 +194,13 @@ static void sensor_task(void *p1, void *p2, void *p3)
 		};
 		k_msgq_put(&data_msgq, &sd, K_MSEC(10));
 
-		k_msleep(500);
+		/* Dynamic workload */
+		volatile uint32_t wl = task_workloads[0];
+		for (volatile uint32_t i = 0; i < wl; i++) {
+			__NOP();
+		}
+
+		k_msleep(10);
 	}
 }
 
@@ -222,15 +228,15 @@ static void processor_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(processor_tid, DEFAULT_STACK,
-// 		processor_task, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(processor_tid, DEFAULT_STACK,
+		processor_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 /* Forward-declare thread IDs for notification targets */
-// extern const k_tid_t calculator_tid;
-// extern const k_tid_t stack_test_tid;
-// extern const k_tid_t consumer_tid;
+extern const k_tid_t calculator_tid;
+extern const k_tid_t stack_test_tid;
+extern const k_tid_t consumer_tid;
 
 static void notifier_task(void *p1, void *p2, void *p3)
 {
@@ -239,9 +245,9 @@ static void notifier_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(notifier_tid, DEFAULT_STACK,
-// 		notifier_task, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(notifier_tid, DEFAULT_STACK,
+		notifier_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 static void stack_test_task(void *p1, void *p2, void *p3)
@@ -289,9 +295,9 @@ static void stack_test_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(stack_test_tid, LARGE_STACK,
-// 		stack_test_task, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(stack_test_tid, LARGE_STACK,
+		stack_test_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 static void consumer_task(void *p1, void *p2, void *p3)
@@ -315,9 +321,9 @@ static void consumer_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(consumer_tid, DEFAULT_STACK,
-// 		consumer_task, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(consumer_tid, DEFAULT_STACK,
+		consumer_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 static void worker_task(void *p1, void *p2, void *p3)
@@ -339,9 +345,9 @@ static void worker_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(worker_tid, DEFAULT_STACK,
-// 		worker_task, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(worker_tid, DEFAULT_STACK,
+		worker_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 static void calculator_task(void *p1, void *p2, void *p3)
@@ -377,9 +383,9 @@ static void calculator_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(calculator_tid, DEFAULT_STACK,
-// 		calculator_task, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(calculator_tid, DEFAULT_STACK,
+		calculator_task, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 static void workload_manager_task(void *p1, void *p2, void *p3)
@@ -426,9 +432,9 @@ static void workload_manager_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(wlmgr_tid, DEFAULT_STACK,
-// 		workload_manager_task, NULL, NULL, NULL,
-// 		PRIO_HIGHEST, 0, 0);
+K_THREAD_DEFINE(wlmgr_tid, DEFAULT_STACK,
+		workload_manager_task, NULL, NULL, NULL,
+		PRIO_HIGHEST, 0, 0);
 
 
 static void contention_low_task(void *p1, void *p2, void *p3)
@@ -509,17 +515,17 @@ static void contention_high_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(cont_low_tid, DEFAULT_STACK,
-// 		contention_low_task, NULL, NULL, NULL,
-// 		PRIO_LOW, 0, 0);
+K_THREAD_DEFINE(cont_low_tid, DEFAULT_STACK,
+		contention_low_task, NULL, NULL, NULL,
+		PRIO_LOW, 0, 0);
 
-// K_THREAD_DEFINE(cont_med_tid, DEFAULT_STACK,
-// 		contention_med_task, NULL, NULL, NULL,
-// 		PRIO_HIGH, 0, 0);
+K_THREAD_DEFINE(cont_med_tid, DEFAULT_STACK,
+		contention_med_task, NULL, NULL, NULL,
+		PRIO_HIGH, 0, 0);
 
-// K_THREAD_DEFINE(cont_high_tid, DEFAULT_STACK,
-// 		contention_high_task, NULL, NULL, NULL,
-// 		PRIO_HIGHEST, 0, 0);
+K_THREAD_DEFINE(cont_high_tid, DEFAULT_STACK,
+		contention_high_task, NULL, NULL, NULL,
+		PRIO_HIGHEST, 0, 0);
 
 
 static void normal_low_task(void *p1, void *p2, void *p3)
@@ -580,17 +586,17 @@ static void normal_high_task(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(norm_low_tid, DEFAULT_STACK,
-// 		normal_low_task, NULL, NULL, NULL,
-// 		PRIO_LOW, 0, 0);
+K_THREAD_DEFINE(norm_low_tid, DEFAULT_STACK,
+		normal_low_task, NULL, NULL, NULL,
+		PRIO_LOW, 0, 0);
 
-// K_THREAD_DEFINE(norm_med_tid, DEFAULT_STACK,
-// 		normal_med_task, NULL, NULL, NULL,
-// 		PRIO_HIGH, 0, 0);
+K_THREAD_DEFINE(norm_med_tid, DEFAULT_STACK,
+		normal_med_task, NULL, NULL, NULL,
+		PRIO_HIGH, 0, 0);
 
-// K_THREAD_DEFINE(norm_high_tid, DEFAULT_STACK,
-// 		normal_high_task, NULL, NULL, NULL,
-// 		PRIO_HIGHEST, 0, 0);
+K_THREAD_DEFINE(norm_high_tid, DEFAULT_STACK,
+		normal_high_task, NULL, NULL, NULL,
+		PRIO_HIGHEST, 0, 0);
 
 
 /* ── Heap demo thread ───────────────────────────────────────── */
@@ -617,9 +623,9 @@ static void heap_demo_thread(void *p1, void *p2, void *p3)
 	}
 }
 
-// K_THREAD_DEFINE(heap_demo_tid, DEFAULT_STACK,
-// 		heap_demo_thread, NULL, NULL, NULL,
-// 		PRIO_NORMAL, 0, 0);
+K_THREAD_DEFINE(heap_demo_tid, DEFAULT_STACK,
+		heap_demo_thread, NULL, NULL, NULL,
+		PRIO_NORMAL, 0, 0);
 
 
 int main(void)
@@ -642,8 +648,8 @@ int main(void)
 
 	VA_Init(SystemCoreClock);
 
-	/* Heartbeat timer disabled for PM testing */
-	// k_timer_start(&heartbeat_timer, K_MSEC(500), K_MSEC(500));
+	/* Start heartbeat timer — 500 ms period */
+	k_timer_start(&heartbeat_timer, K_MSEC(500), K_MSEC(500));
 
 	// No need to register is using a schema
 	VA_RegisterUserTrace(42, "Sine Value", VA_USER_TYPE_GRAPH);
