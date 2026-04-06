@@ -163,6 +163,7 @@ def _resolve_openocd_bin(cubeclt_root: Path | None) -> str:
             return str(candidate)
 
     fallback = _existing_path_from_candidates(
+        "C:/opeonocd_12.0.3/bin/openocd.exe",
         "C:/ST/STM32CubeCLT_*/OpenOCD/bin/openocd.exe",
         "C:/Program Files/STMicroelectronics/STM32CubeCLT_*/OpenOCD/bin/openocd.exe",
         "/usr/local/bin/openocd",
@@ -188,6 +189,7 @@ def _resolve_openocd_scripts(cubeclt_root: Path | None) -> Path:
             return candidate
 
     fallback = _existing_path_from_candidates(
+        "C:/opeonocd_12.0.3/share/openocd/scripts",
         "C:/ST/STM32CubeCLT_*/OpenOCD/share/openocd/scripts",
         "C:/Program Files/STMicroelectronics/STM32CubeCLT_*/OpenOCD/share/openocd/scripts",
         "/usr/local/share/openocd/scripts",
@@ -252,6 +254,7 @@ class BoardConfig:
 
 
 # Locally-built ST OpenOCD (needed for H7 — system OpenOCD has incompatible scripts).
+# Only used on Linux; on Windows the normal host-tools resolution applies.
 _LOCAL_ST_OPENOCD_BIN = EXTERNAL_DIR / "OpenOCD" / "src" / "openocd"
 _LOCAL_ST_OPENOCD_TCL = EXTERNAL_DIR / "OpenOCD" / "tcl"
 
@@ -278,8 +281,8 @@ BOARD_CONFIGS = {
         jlink_device="STM32H735IG",
         default_flash_runner="openocd",
         openocd_config=ZEPHYR_BASE / "boards" / "st" / "stm32h750b_dk" / "support" / "openocd.cfg",
-        openocd_bin=str(_LOCAL_ST_OPENOCD_BIN) if _LOCAL_ST_OPENOCD_BIN.exists() else None,
-        openocd_scripts=_LOCAL_ST_OPENOCD_TCL if _LOCAL_ST_OPENOCD_TCL.exists() else None,
+        openocd_bin=str(_LOCAL_ST_OPENOCD_BIN) if (not IS_WINDOWS and _LOCAL_ST_OPENOCD_BIN.exists()) else None,
+        openocd_scripts=_LOCAL_ST_OPENOCD_TCL if (not IS_WINDOWS and _LOCAL_ST_OPENOCD_TCL.exists()) else None,
     ),
     "h5": BoardConfig(
         alias="h5",
@@ -288,8 +291,8 @@ BOARD_CONFIGS = {
         jlink_device="STM32H503RB",
         default_flash_runner="openocd",
         openocd_config=ZEPHYR_BASE / "boards" / "st" / "nucleo_h503rb" / "support" / "openocd.cfg",
-        openocd_bin=str(_LOCAL_ST_OPENOCD_BIN) if _LOCAL_ST_OPENOCD_BIN.exists() else None,
-        openocd_scripts=_LOCAL_ST_OPENOCD_TCL if _LOCAL_ST_OPENOCD_TCL.exists() else None,
+        openocd_bin=str(_LOCAL_ST_OPENOCD_BIN) if (not IS_WINDOWS and _LOCAL_ST_OPENOCD_BIN.exists()) else None,
+        openocd_scripts=_LOCAL_ST_OPENOCD_TCL if (not IS_WINDOWS and _LOCAL_ST_OPENOCD_TCL.exists()) else None,
     ),
 }
 
