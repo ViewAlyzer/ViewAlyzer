@@ -650,7 +650,8 @@ int main(void)
 
 	/* Start heartbeat timer — 500 ms period */
 	k_timer_start(&heartbeat_timer, K_MSEC(500), K_MSEC(500));
-
+	//VA_Zephyr_RegisterExistingThreads();
+	register_viewalyzer_sync_objects();
 	// No need to register is using a schema
 	VA_RegisterUserTrace(42, "Sine Value", VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);
