@@ -511,6 +511,9 @@ def cmd_menuconfig(board_cfg: BoardConfig):
     env, host_tools = setup_env()
     west = find_west(env)
 
+    quarantine_root_build_artifacts()
+    build_dir_reset = reset_build_dir_if_needed(board_cfg)
+
     args = west_build_args(board_cfg, west, False, host_tools)
     # Insert -t menuconfig before the "--" separator so it's parsed by
     # west, not forwarded to CMake.
@@ -522,6 +525,8 @@ def cmd_menuconfig(board_cfg: BoardConfig):
 
     print(f"Opening menuconfig for {board_cfg.board} ({board_cfg.alias}) …")
     print(f"  build dir = {board_cfg.build_dir}")
+    if build_dir_reset:
+        print("  note        = removed stale build directory generated on a different host/path")
     print()
 
     return subprocess.call(args, env=env, cwd=str(PROJECT_DIR))
