@@ -158,8 +158,8 @@ extern "C"
 #define VA_TRANSPORT_IS_CUSTOM   ((VA_TRANSPORT) == CUSTOM_TRANSPORT)
 
 // Maximum raw packet size (before COBS encoding).
-// Largest packet is VA_LogString: 11-byte header + up to 200-byte message.
-#define VA_MAX_PACKET_SIZE 212
+// Largest packet is VA_LogString: 12-byte header + up to 1024-byte message.
+#define VA_MAX_PACKET_SIZE 1036
 
 // User-provided send function signature for custom transport
 typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);

@@ -30,11 +30,22 @@
 
 /* ── Internal context ─────────────────────────────────────────────────── */
 
+#define VA_UDP_BATCH_MAX 1400 /* stay under typical MTU */
+
 struct va_udp_ctx
 {
     va_socket_t        sock;
     struct sockaddr_in dest;
     uint32_t           cpu_freq_hz;
+
+    /* Optional user-supplied transport callback */
+    va_udp_send_fn     send_fn;
+    void              *send_fn_arg;
+
+    /* Batch accumulator */
+    uint8_t  batch_buf[VA_UDP_BATCH_MAX];
+    size_t   batch_len;
+    int      batch_depth; /* nesting counter — flush only when depth reaches 0 */
 };
 
 /* ── Sync marker ──────────────────────────────────────────────────────── */
@@ -46,14 +57,19 @@ static const uint8_t VA_SYNC_MARKER[12] = {
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
+static void write_u16_le(uint8_t *buf, uint16_t v) { memcpy(buf, &v, 2); }
 static void write_i32_le(uint8_t *buf, int32_t v)  { memcpy(buf, &v, 4); }
 static void write_u64_le(uint8_t *buf, uint64_t v) { memcpy(buf, &v, 8); }
 static void write_f32_le(uint8_t *buf, float v)    { memcpy(buf, &v, 4); }
 
 static void va_udp_sendto(va_udp_ctx_t *ctx, const uint8_t *data, size_t len)
 {
-    sendto((int)ctx->sock, (const char *)data, (int)len, 0,
-           (struct sockaddr *)&ctx->dest, sizeof(ctx->dest));
+    if (ctx->send_fn) {
+        ctx->send_fn(ctx->send_fn_arg, data, len);
+    } else {
+        sendto((int)ctx->sock, (const char *)data, (int)len, 0,
+               (struct sockaddr *)&ctx->dest, sizeof(ctx->dest));
+    }
 }
 
 /* ── Public: init / close ─────────────────────────────────────────────── */
@@ -100,13 +116,58 @@ void va_udp_close(va_udp_ctx_t *ctx)
     free(ctx);
 }
 
+void va_udp_set_send_fn(va_udp_ctx_t *ctx, va_udp_send_fn fn, void *arg)
+{
+    if (ctx) {
+        ctx->send_fn     = fn;
+        ctx->send_fn_arg = arg;
+    }
+}
+
+/* ── Public: batching ─────────────────────────────────────────────────── */
+
+void va_udp_batch_begin(va_udp_ctx_t *ctx)
+{
+    if (!ctx) return;
+    if (ctx->batch_depth == 0)
+        ctx->batch_len = 0;
+    ctx->batch_depth++;
+}
+
+static void va_udp_batch_send(va_udp_ctx_t *ctx)
+{
+    if (ctx->batch_len > 0) {
+        va_udp_sendto(ctx, ctx->batch_buf, ctx->batch_len);
+        ctx->batch_len = 0;
+    }
+}
+
+void va_udp_batch_flush(va_udp_ctx_t *ctx)
+{
+    if (!ctx) return;
+    if (ctx->batch_depth > 0)
+        ctx->batch_depth--;
+    if (ctx->batch_depth == 0)
+        va_udp_batch_send(ctx);
+}
+
 /* ── Public: send raw framed ──────────────────────────────────────────── */
 
 void va_udp_send_raw_framed(va_udp_ctx_t *ctx, const uint8_t *pkt, size_t pkt_len)
 {
-    uint8_t buf[280];
+    uint8_t buf[VA_UDP_COBS_BUF_LEN];
     size_t encoded_len = va_cobs_encode(pkt, pkt_len, buf);
-    va_udp_sendto(ctx, buf, encoded_len);
+
+    if (ctx->batch_depth > 0) {
+        /* If this frame won't fit, flush first */
+        if (ctx->batch_len + encoded_len > VA_UDP_BATCH_MAX)
+            va_udp_batch_send(ctx);
+
+        memcpy(ctx->batch_buf + ctx->batch_len, buf, encoded_len);
+        ctx->batch_len += encoded_len;
+    } else {
+        va_udp_sendto(ctx, buf, encoded_len);
+    }
 }
 
 /* ── Public: name setup helper (used by core + rtos extension) ────────── */
@@ -162,7 +223,7 @@ void va_udp_send_trace_int(va_udp_ctx_t *ctx, uint8_t trace_id,
                            uint64_t timestamp, int32_t value)
 {
     uint8_t pkt[14];
-    pkt[0] = VA_UDP_EVT_USER_TRACE | VA_UDP_FLAG_START;
+    pkt[0] = VA_UDP_EVT_USER_TRACE;
     pkt[1] = trace_id;
     write_u64_le(&pkt[2],  timestamp);
     write_i32_le(&pkt[10], value);
@@ -173,7 +234,7 @@ void va_udp_send_trace_float(va_udp_ctx_t *ctx, uint8_t trace_id,
                              uint64_t timestamp, float value)
 {
     uint8_t pkt[14];
-    pkt[0] = VA_UDP_EVT_FLOAT_TRACE | VA_UDP_FLAG_START;
+    pkt[0] = VA_UDP_EVT_FLOAT_TRACE;
     pkt[1] = trace_id;
     write_u64_le(&pkt[2],  timestamp);
     write_f32_le(&pkt[10], value);
@@ -208,11 +269,11 @@ void va_udp_send_string(va_udp_ctx_t *ctx, uint8_t msg_id,
     if (msg_len > VA_UDP_MAX_STRING_LEN)
         msg_len = VA_UDP_MAX_STRING_LEN;
 
-    uint8_t pkt[11 + VA_UDP_MAX_STRING_LEN];
+    uint8_t pkt[12 + VA_UDP_MAX_STRING_LEN];
     pkt[0]  = VA_UDP_EVT_STRING_EVENT;
     pkt[1]  = msg_id;
     write_u64_le(&pkt[2], timestamp);
-    pkt[10] = (uint8_t)msg_len;
-    memcpy(&pkt[11], message, msg_len);
-    va_udp_send_raw_framed(ctx, pkt, 11 + msg_len);
+    write_u16_le(&pkt[10], (uint16_t)msg_len);
+    memcpy(&pkt[12], message, msg_len);
+    va_udp_send_raw_framed(ctx, pkt, 12 + msg_len);
 }

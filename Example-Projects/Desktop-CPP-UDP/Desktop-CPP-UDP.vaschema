@@ -1,0 +1,47 @@
+{
+    "version": 1,
+    "name": "Desktop C++ UDP Example",
+    "description": "Schema for the Desktop-CPP-UDP example project. Receives trace data over localhost UDP with COBS framing.",
+    "targetDevice": "",
+
+    "transport": {
+        "type": "udp",
+        "udpListenIP": "0.0.0.0",
+        "udpListenPort": 17200,
+        "cpuClockHz": 170000000,
+        "framing": "cobs"
+    },
+
+    "protocol": {
+        "bigEndian": false,
+        "rtos": true,
+
+        "tasks": [
+            { "id": 0, "name": "MainTask" },
+            { "id": 1, "name": "SensorTask" },
+            { "id": 2, "name": "CommTask" }
+        ],
+
+        "userTraces": [
+            { "id": 0, "name": "SineWave",    "type": "graph" },
+            { "id": 1, "name": "Counter",     "type": "counter" },
+            { "id": 2, "name": "Temperature", "type": "gauge" },
+            { "id": 3, "name": "CosineWave",  "type": "graph" }
+        ],
+
+        "userFunctions": [
+            { "id": 0, "name": "processData" },
+            { "id": 1, "name": "calibrate" },
+            { "id": 2, "name": "readSensor" }
+        ],
+
+        "userToggles": [
+            { "id": 0, "name": "HeartbeatToggle" }
+        ],
+
+        "userStrings": [
+            { "id": 0, "name": "Log" },
+            { "id": 1, "name": "DetailedStatus" }
+        ]
+    }
+}

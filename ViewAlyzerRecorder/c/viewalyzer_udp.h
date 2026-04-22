@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,13 +56,25 @@ extern "C" {
 #define VA_UDP_TRACE_HISTOGRAM  5
 #define VA_UDP_TRACE_REGISTER   9
 
-/* Maximum string length for string events */
-#define VA_UDP_MAX_STRING_LEN   200
+/* Maximum string length for string events (2-byte length field, uint16_t LE) */
+#define VA_UDP_MAX_STRING_LEN   1024
+
+/* Max raw packet size (header + string) and COBS encode buffer size */
+#define VA_UDP_MAX_PKT_LEN      (12 + VA_UDP_MAX_STRING_LEN)
+#define VA_UDP_COBS_BUF_LEN     (VA_UDP_MAX_PKT_LEN + (VA_UDP_MAX_PKT_LEN / 254) + 2)
 
 /* ── Context ───────────────────────────────────────────────────────────── */
 
 /** Opaque handle — call va_udp_init() to populate. */
 typedef struct va_udp_ctx va_udp_ctx_t;
+
+/**
+ * Raw-transport callback signature.
+ * @param arg   User-supplied pointer (e.g. pointer to a driver wrapper).
+ * @param data  COBS-encoded payload to transmit as a single UDP datagram.
+ * @param len   Length of @p data in bytes.
+ */
+typedef void (*va_udp_send_fn)(void* arg, const uint8_t* data, size_t len);
 
 /**
  * Initialise the UDP sender.
@@ -73,6 +86,12 @@ typedef struct va_udp_ctx va_udp_ctx_t;
  *                    Free with va_udp_close().
  */
 va_udp_ctx_t *va_udp_init(const char *dest_ip, uint16_t dest_port, uint32_t cpu_freq_hz);
+
+/**
+ * Set the raw send callback (replaces the default socket-based sendto).
+ * Must be called after va_udp_init() and before any trace emission.
+ */
+void va_udp_set_send_fn(va_udp_ctx_t *ctx, va_udp_send_fn fn, void *arg);
 
 /** Close the socket and free the context. */
 void va_udp_close(va_udp_ctx_t *ctx);
@@ -111,10 +130,28 @@ void va_udp_send_function(va_udp_ctx_t *ctx, uint8_t func_id,
 void va_udp_send_string(va_udp_ctx_t *ctx, uint8_t msg_id,
                         uint64_t timestamp, const char *message);
 
+/* ── Batching ───────────────────────────────────────────────────────────── */
+
+/**
+ * Begin accumulating packets into an internal buffer instead of sending
+ * each one immediately.  Call va_udp_batch_flush() to send the accumulated
+ * buffer as a single UDP datagram (or a small number of MTU-sized chunks).
+ *
+ * Supports nesting — only the outermost flush actually sends.
+ */
+void va_udp_batch_begin(va_udp_ctx_t *ctx);
+
+/**
+ * Flush (send) the accumulated batch buffer and return to immediate mode.
+ */
+void va_udp_batch_flush(va_udp_ctx_t *ctx);
+
 /* ── Low-level helpers (for advanced use / RTOS extension) ─────────────── */
 
 /**
  * COBS-encode a raw packet and send it over the context's UDP socket.
+ * If batching is active, the encoded packet is appended to the batch
+ * buffer instead of being sent immediately.
  * Most users should use the typed functions above instead.
  */
 void va_udp_send_raw_framed(va_udp_ctx_t *ctx, const uint8_t *pkt, size_t pkt_len);

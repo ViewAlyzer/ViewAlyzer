@@ -920,14 +920,14 @@ void VA_LogTraceFloat(uint8_t id, float value)
 void VA_LogString(uint8_t id, const char *msg)
 {
     if (!msg) return;
-    uint8_t len = (uint8_t)strlen(msg);
+    uint16_t len = (uint16_t)strlen(msg);
     if (len == 0) return;
-    if (len > 200) len = 200;
+    if (len > 1024) len = 1024;
 
     VA_CS_ENTER();
     uint64_t ts = _va_get_timestamp();
 
-    uint8_t buf[11 + 200];
+    uint8_t buf[12 + 1024];
     buf[0] = VA_EVENT_STRING_EVENT;
     buf[1] = id;
     buf[2]  = (uint8_t)(ts >> 0);
@@ -938,10 +938,11 @@ void VA_LogString(uint8_t id, const char *msg)
     buf[7]  = (uint8_t)(ts >> 40);
     buf[8]  = (uint8_t)(ts >> 48);
     buf[9]  = (uint8_t)(ts >> 56);
-    buf[10] = len;
-    memcpy(&buf[11], msg, len);
+    buf[10] = (uint8_t)(len >> 0);
+    buf[11] = (uint8_t)(len >> 8);
+    memcpy(&buf[12], msg, len);
 
-    _va_emit_packet(buf, 11 + len);
+    _va_emit_packet(buf, 12 + len);
     VA_CS_EXIT();
 }
 

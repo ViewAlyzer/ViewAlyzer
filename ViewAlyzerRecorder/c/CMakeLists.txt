@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
-project(ViewAlyzerSDK VERSION 0.1.0 LANGUAGES C)
+project(ViewAlyzerSDK VERSION 0.1.0 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ── Core library (traces, strings, toggles, functions) ───────────────────
 add_library(viewalyzer_core STATIC
@@ -25,4 +28,12 @@ target_link_libraries(desktop_example PRIVATE viewalyzer_core)
 
 if(UNIX)
     target_link_libraries(desktop_example PRIVATE m)
+endif()
+
+# ── C++ desktop example (core + rtos, pluggable transport) ───────────────
+add_executable(desktop_example_cpp examples/desktop_example_cpp.cpp)
+target_link_libraries(desktop_example_cpp PRIVATE viewalyzer_core viewalyzer_rtos)
+
+if(UNIX)
+    target_link_libraries(desktop_example_cpp PRIVATE m)
 endif()
