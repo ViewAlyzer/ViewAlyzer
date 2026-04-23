@@ -151,7 +151,10 @@ K_THREAD_DEFINE(blink_tid, DEFAULT_STACK,
 
 static void default_task(void *p1, void *p2, void *p3)
 {
-	VA_LogString(1, "System started");
+	/* NOTE: do NOT call VA_LogString here — it puts a ~1 KB buffer on the
+	 * stack and this thread only has DEFAULT_STACK bytes. The string is
+	 * logged from main() instead, which has CONFIG_MAIN_STACK_SIZE.
+	 */
 
 	while (1) {
 		/* Release binary semaphore for other tasks */
@@ -674,8 +677,8 @@ int main(void)
 
 	VA_RegisterUserEvent(45, "Calc Event");
 
-
-
+	/* Logged from main (2 KB stack) — VA_LogString uses a ~1 KB stack buf. */
+	VA_LogString(1, "System started");
 
 	return 0;
 }
