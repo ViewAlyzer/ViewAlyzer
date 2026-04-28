@@ -922,12 +922,12 @@ void VA_LogString(uint8_t id, const char *msg)
     if (!msg) return;
     uint16_t len = (uint16_t)strlen(msg);
     if (len == 0) return;
-    if (len > 1024) len = 1024;
+    if (len > VA_MAX_LOG_STRING_LEN) len = VA_MAX_LOG_STRING_LEN;
 
     VA_CS_ENTER();
     uint64_t ts = _va_get_timestamp();
 
-    uint8_t buf[12 + 1024];
+    uint8_t buf[12 + VA_MAX_LOG_STRING_LEN];
     buf[0] = VA_EVENT_STRING_EVENT;
     buf[1] = id;
     buf[2]  = (uint8_t)(ts >> 0);

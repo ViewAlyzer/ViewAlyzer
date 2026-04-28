@@ -110,6 +110,10 @@ extern "C"
 #define VA_ALLOWED_TO_DISABLE_INTERRUPTS 1 // Set to 1 to allow critical sections
 #endif
 
+#ifndef VA_MAX_LOG_STRING_LEN
+#define VA_MAX_LOG_STRING_LEN 100  // Max bytes per VA_LogString() message. Protocol max is 1024.
+#endif
+
 #ifndef VA_CAPTURE_STACK_USAGE
 #define VA_CAPTURE_STACK_USAGE 1 // Set to 0 to disable stack usage packets and queries
 #endif
@@ -158,8 +162,8 @@ extern "C"
 #define VA_TRANSPORT_IS_CUSTOM   ((VA_TRANSPORT) == CUSTOM_TRANSPORT)
 
 // Maximum raw packet size (before COBS encoding).
-// Largest packet is VA_LogString: 12-byte header + up to 1024-byte message.
-#define VA_MAX_PACKET_SIZE 1036
+// Largest packet is VA_LogString: 12-byte header + message payload.
+#define VA_MAX_PACKET_SIZE (12 + VA_MAX_LOG_STRING_LEN)
 
 // User-provided send function signature for custom transport
 typedef void (*VA_TransportSendFn)(const uint8_t *data, uint32_t length);
