@@ -38,9 +38,40 @@ ViewAlyzer is a comprehensive profiler and timeline viewer for embedded systems 
 ## Repository Contents
 
 This repository includes:
-- Recorder firmware 
-- Example projects
+- Recorder firmware ([ViewAlyzerRecorder/](ViewAlyzerRecorder/))
+- Example projects ([Example-Projects/](Example-Projects/)), grouped by RTOS
 - Community discussions and support
+
+### Example Projects
+
+Standalone, build-and-go projects organized by runtime:
+
+```
+Example-Projects/
+├── baremetal/        # No RTOS examples (coming soon)
+├── freertos/         # FreeRTOS examples (Nucleo F103, F446RE, G474, U385)
+├── zephyr/           # Zephyr examples (STM32 G4 / F4 / H5 / H7)
+└── Desktop-CPP-UDP/  # Host-side C++ UDP sender example
+```
+
+Each project is self-contained — clone this repo, open the project folder,
+and build with the standard toolchain for that target. All projects pull
+recorder sources from the shared [ViewAlyzerRecorder/](ViewAlyzerRecorder/)
+directory using a relative path (`../../../ViewAlyzerRecorder`).
+
+The Zephyr examples additionally expect a **Zephyr source tree on disk**,
+typically as a sibling of this `ViewAlyzer` repo:
+
+```
+<your-workspace>/
+├── ViewAlyzer/        # this repository
+└── zephyr/            # Zephyr RTOS source (west.yml, kernel/, boards/, ...)
+```
+
+The Zephyr sample's `build.py` will auto-detect a `zephyr/` folder above the
+project, or you can point it at one explicitly via the `ZEPHYR_BASE`
+environment variable. See [Example-Projects/README.md](Example-Projects/README.md)
+for full details.
 
 ### Reporting Issues
 - **Bug Reports**: Use our [bug report template](../../issues/new?assignees=&labels=bug&projects=&template=bug_report.md)

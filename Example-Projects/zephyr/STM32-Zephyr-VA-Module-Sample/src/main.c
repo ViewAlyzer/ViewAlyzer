@@ -184,7 +184,6 @@ static void sensor_task(void *p1, void *p2, void *p3)
 {
 	while (1) {
 		sineVal = get_next_sine_value();
-		VA_LogTrace(42, sineVal);
 
 		/* Log sine as float (normalized -1.0 to 1.0) */
 		float radians = (sine_index * 2.0f * (float)M_PI) / 360.0f;
@@ -224,7 +223,6 @@ static void processor_task(void *p1, void *p2, void *p3)
 				sharedAccumulator += rx.sensorValue;
 				k_mutex_unlock(&shared_resource_mutex);
 			}
-			VA_LogTrace(46, rx.sensorValue);
 		}
 
 		k_msleep(100);
@@ -282,7 +280,6 @@ static void stack_test_task(void *p1, void *p2, void *p3)
 		if (k_mutex_lock(&shared_resource_mutex, K_MSEC(100)) == 0) {
 			sharedCounter += stack_words;
 			sharedAccumulator += sum;
-			VA_LogTrace(47, sharedCounter);
 			VA_LogTraceFloat(61, sharedAccumulator);
 			k_mutex_unlock(&shared_resource_mutex);
 		}
@@ -334,7 +331,7 @@ static void worker_task(void *p1, void *p2, void *p3)
 	while (1) {
 		if (k_mutex_lock(&print_mutex, K_MSEC(100)) == 0) {
 			volatile uint32_t protected_op = k_uptime_get_32() * 2;
-			VA_LogTrace(48, protected_op);
+			(void)protected_op;
 			k_mutex_unlock(&print_mutex);
 		}
 
@@ -359,12 +356,9 @@ static void calculator_task(void *p1, void *p2, void *p3)
 		// VA_LogToggle(44, TOGGLE_HIGH);  /* moved to timer handler for debug */
 		VA_LogEvent(45, USER_EVENT_START);
 
-		uint16_t invertedSineVal = 200 - sineVal;
-		VA_LogTraceFloat(63, (float)invertedSineVal / 100.0f - 1.0f);
-
 		if (k_mutex_lock(&shared_resource_mutex, K_MSEC(50)) == 0) {
 			volatile uint32_t localCounter = sharedCounter;
-			VA_LogTrace(49, localCounter);
+			(void)localCounter;
 			k_mutex_unlock(&shared_resource_mutex);
 		}
 
@@ -447,7 +441,6 @@ static void contention_low_task(void *p1, void *p2, void *p3)
 		if (k_mutex_lock(&contention_test_mutex, K_FOREVER) == 0) {
 			lowPrioAccess++;
 			contentionCounter++;
-			VA_LogTrace(51, (int32_t)lowPrioAccess);
 
 			volatile uint32_t work = 0;
 			for (int i = 0; i < 50000; i++) {
@@ -472,7 +465,6 @@ static void contention_med_task(void *p1, void *p2, void *p3)
 		if (k_mutex_lock(&contention_test_mutex, K_MSEC(100)) == 0) {
 			medPrioAccess++;
 			contentionCounter++;
-			VA_LogTrace(52, (int32_t)medPrioAccess);
 
 			volatile uint32_t work = 0;
 			for (int i = 0; i < 10000; i++) {
@@ -481,8 +473,6 @@ static void contention_med_task(void *p1, void *p2, void *p3)
 			k_msleep(10);
 
 			k_mutex_unlock(&contention_test_mutex);
-		} else {
-			VA_LogTrace(52, -1);  /* timeout */
 		}
 
 		k_msleep(150);
@@ -500,7 +490,6 @@ static void contention_high_task(void *p1, void *p2, void *p3)
 			int32_t waitTime = (int32_t)(k_uptime_get() - start);
 			highPrioAccess++;
 			contentionCounter++;
-			VA_LogTrace(53, SystemCoreClock);
 			VA_LogTraceFloat(62, (float)waitTime);
 
 			volatile uint32_t work = 0;
@@ -510,8 +499,6 @@ static void contention_high_task(void *p1, void *p2, void *p3)
 			k_msleep(5);
 
 			k_mutex_unlock(&contention_test_mutex);
-		} else {
-			VA_LogTrace(53, SystemCoreClock);
 		}
 
 		k_msleep(120);
@@ -536,7 +523,6 @@ static void normal_low_task(void *p1, void *p2, void *p3)
 	while (1) {
 		if (k_mutex_lock(&normal_op_mutex, K_MSEC(50)) == 0) {
 			normalSharedValue += 1;
-			VA_LogTrace(54, (int32_t)normalSharedValue);
 			k_mutex_unlock(&normal_op_mutex);
 		}
 
@@ -556,7 +542,6 @@ static void normal_med_task(void *p1, void *p2, void *p3)
 	while (1) {
 		if (k_mutex_lock(&normal_op_mutex, K_MSEC(50)) == 0) {
 			normalSharedValue += 10;
-			VA_LogTrace(55, (int32_t)normalSharedValue);
 			k_mutex_unlock(&normal_op_mutex);
 		}
 
@@ -576,7 +561,6 @@ static void normal_high_task(void *p1, void *p2, void *p3)
 	while (1) {
 		if (k_mutex_lock(&normal_op_mutex, K_MSEC(50)) == 0) {
 			normalSharedValue += 100;
-			VA_LogTrace(56, (int32_t)normalSharedValue);
 			k_mutex_unlock(&normal_op_mutex);
 		}
 
@@ -656,24 +640,12 @@ int main(void)
 	//VA_Zephyr_RegisterExistingThreads();
 	register_viewalyzer_sync_objects();
 	// No need to register is using a schema
-	VA_RegisterUserTrace(42, "Sine Value", VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(43, "Tick Counter", VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(44, "Calc Toggle", VA_USER_TYPE_TOGGLE);
-	VA_RegisterUserTrace(46, "Processed Data", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(47, "Shared Counter", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(48, "Protected Op", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(49, "Calc Shared", VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(50, "Workload Profile", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(51, "Low Prio Access", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(52, "Med Prio Access", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(53, "High Prio Wait", VA_USER_TYPE_COUNTER);
-	VA_RegisterUserTrace(54, "Normal Low", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(55, "Normal Med", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(56, "Normal High", VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(60, "Sine Float", VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(61, "Shared Accum", VA_USER_TYPE_GRAPH);
 	VA_RegisterUserTrace(62, "HighPrio WaitF", VA_USER_TYPE_GRAPH);
-	VA_RegisterUserTrace(63, "Inv Sine Float", VA_USER_TYPE_GRAPH);
 
 	VA_RegisterUserEvent(45, "Calc Event");
 

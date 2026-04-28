@@ -54,12 +54,16 @@ elif _zephyr_env:
     ZEPHYR_BASE = Path(_zephyr_env)
 else:
     # Fallback: look for a 'zephyr' directory next to this project,
-    # or one level up, or two levels up.
+    # or one level up, etc.  We walk several parents because the
+    # sample now lives a few directories deep inside the ViewAlyzer
+    # repo (Example-Projects/zephyr/STM32-Zephyr-VA-Module-Sample/).
     for _candidate in (
         PROJECT_DIR / "zephyr",
         PROJECT_DIR.parent / "zephyr",
         PROJECT_DIR.parent.parent / "zephyr",
         PROJECT_DIR.parent.parent.parent / "zephyr",
+        PROJECT_DIR.parent.parent.parent.parent / "zephyr",
+        PROJECT_DIR.parent.parent.parent.parent.parent / "zephyr",
     ):
         if (_candidate / "west.yml").exists():
             ZEPHYR_BASE = _candidate

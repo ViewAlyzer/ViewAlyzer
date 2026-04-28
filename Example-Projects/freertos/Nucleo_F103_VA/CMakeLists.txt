@@ -19,7 +19,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Set the project name
-set(CMAKE_PROJECT_NAME Nucleo_F446RE)
+set(CMAKE_PROJECT_NAME Nucleo_F103_VA)
 
 # Include toolchain file
 include("cmake/gcc-arm-none-eabi.cmake")
@@ -46,14 +46,12 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Shared ViewAlyzer recorder location
-set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../ViewAlyzerRecorder")
+set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../ViewAlyzerRecorder")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     ${VIEWALYZER_RECORDER_DIR}/core/ViewAlyzer.c
-    SEGGER_RTT/SEGGER_RTT.c
-    SEGGER_RTT/SEGGER_RTT_printf.c  
 )
 
 # Add include paths
@@ -61,7 +59,6 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     ${VIEWALYZER_RECORDER_DIR}/core
     ${VIEWALYZER_RECORDER_DIR}/freertos
-    SEGGER_RTT/
 )
 
 # Add project symbols (macros)

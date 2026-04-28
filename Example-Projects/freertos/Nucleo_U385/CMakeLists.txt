@@ -19,7 +19,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Set the project name
-set(CMAKE_PROJECT_NAME Nucleo_F103_VA)
+set(CMAKE_PROJECT_NAME Nucleo_U385)
 
 # Include toolchain file
 include("cmake/gcc-arm-none-eabi.cmake")
@@ -46,7 +46,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Shared ViewAlyzer recorder location
-set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../ViewAlyzerRecorder")
+set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../ViewAlyzerRecorder")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE

@@ -28,16 +28,8 @@
     "rtosType": "Zephyr",
     "userTraces": [
       {
-        "id": 42,
-        "name": "Sine Value",
-        "type": "graph",
-        "scaleMin": 0.0,
-        "scaleMax": 200.0,
-        "colour": "#808080"
-      },
-      {
-        "id": 46,
-        "name": "Processed Data",
+        "id": 43,
+        "name": "Tick Counter",
         "type": "graph",
         "colour": "#808080"
       },

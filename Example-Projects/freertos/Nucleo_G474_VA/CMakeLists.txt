@@ -47,7 +47,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Shared ViewAlyzer recorder location
-set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../ViewAlyzerRecorder")
+set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../ViewAlyzerRecorder")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE

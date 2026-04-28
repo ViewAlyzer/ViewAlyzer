@@ -29,14 +29,6 @@
     "rtosType": "Zephyr",
     "userTraces": [
       {
-        "id": 42,
-        "name": "Sine Value",
-        "type": "graph",
-        "scaleMin": 0.0,
-        "scaleMax": 200.0,
-        "colour": "#808080"
-      },
-      {
         "id": 43,
         "name": "Tick Counter",
         "type": "graph",
@@ -49,68 +41,8 @@
         "colour": "#808080"
       },
       {
-        "id": 46,
-        "name": "Processed Data",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 47,
-        "name": "Shared Counter",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 48,
-        "name": "Protected Op",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 49,
-        "name": "Calc Shared",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
         "id": 50,
         "name": "Workload Profile",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 51,
-        "name": "Low Prio Access",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 52,
-        "name": "Med Prio Access",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 53,
-        "name": "High Prio Wait",
-        "type": "counter",
-        "colour": "#808080"
-      },
-      {
-        "id": 54,
-        "name": "Normal Low",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 55,
-        "name": "Normal Med",
-        "type": "graph",
-        "colour": "#808080"
-      },
-      {
-        "id": 56,
-        "name": "Normal High",
         "type": "graph",
         "colour": "#808080"
       },
@@ -134,14 +66,6 @@
         "type": "graph",
         "scaleMin": 0.0,
         "scaleMax": 100.0,
-        "colour": "#808080"
-      },
-      {
-        "id": 63,
-        "name": "Inv Sine Float",
-        "type": "graph",
-        "scaleMin": -1.0,
-        "scaleMax": 1.0,
         "colour": "#808080"
       }
     ],
