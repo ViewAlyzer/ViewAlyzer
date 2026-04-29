@@ -64,6 +64,16 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ${VIEWALYZER_RECORDER_DIR}/freertos
 )
 
+# Force the FreeRTOS source files (compiled inside the RTOS2 OBJECT library
+# created by cmake/stm32cubemx) to find the ViewAlyzer hook header in the
+# shared recorder directory instead of any local copy under Core/Inc.
+# BEFORE prepends our paths so they win over the stm32cubemx INTERFACE
+# include directories (which list Core/Inc first).
+target_include_directories(FreeRTOS BEFORE PRIVATE
+    ${VIEWALYZER_RECORDER_DIR}/core
+    ${VIEWALYZER_RECORDER_DIR}/freertos
+)
+
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols

@@ -52,11 +52,23 @@ set(VIEWALYZER_RECORDER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../ViewAlyzerReco
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     ${VIEWALYZER_RECORDER_DIR}/core/ViewAlyzer.c
+    ${VIEWALYZER_RECORDER_DIR}/core/viewalyzer_cobs.c
+    ${VIEWALYZER_RECORDER_DIR}/freertos/VA_Adapter_FreeRTOS.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    ${VIEWALYZER_RECORDER_DIR}/core
+    ${VIEWALYZER_RECORDER_DIR}/freertos
+)
+
+# Force the FreeRTOS source files (compiled inside the FreeRTOS OBJECT library
+# created by cmake/stm32cubemx) to find the ViewAlyzer hook header in the
+# shared recorder directory instead of any local copy under Core/Inc.
+# BEFORE prepends our paths so they win over the stm32cubemx INTERFACE
+# include directories (which list Core/Inc first).
+target_include_directories(FreeRTOS BEFORE PRIVATE
     ${VIEWALYZER_RECORDER_DIR}/core
     ${VIEWALYZER_RECORDER_DIR}/freertos
 )

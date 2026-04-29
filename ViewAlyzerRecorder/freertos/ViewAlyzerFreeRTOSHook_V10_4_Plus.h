@@ -88,11 +88,11 @@ extern volatile uint32_t g_task_ulStackDepth;
 extern volatile uint32_t notificationValue;
 #define traceTASK_NOTIFY(uxIndexToNotify) (notificationValue = ulValue, va_logtasknotifygive((void *)pxCurrentTCB, (void *)pxTCB, ulValue))
 #define traceTASK_NOTIFY_FROM_ISR(uxIndexToNotify) (notificationValue = ulValue, va_logtasknotifygive(NULL, (void *)pxTCB, ulValue))
-#define traceTASK_NOTIFY_GIVE_FROM_ISR(uxIndexToNotify) (notificationValue = pxTCB->ulNotifiedValue, va_logtasknotifygive(NULL, (void *)pxTCB, pxTCB->ulNotifiedValue))
-#define traceTASK_NOTIFY_TAKE(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue)
-#define traceTASK_NOTIFY_TAKE_BLOCK(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue)
-#define traceTASK_NOTIFY_WAIT(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue)
-#define traceTASK_NOTIFY_WAIT_BLOCK(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue)
+#define traceTASK_NOTIFY_GIVE_FROM_ISR(uxIndexToNotify) (notificationValue = pxTCB->ulNotifiedValue[(uxIndexToNotify)], va_logtasknotifygive(NULL, (void *)pxTCB, pxTCB->ulNotifiedValue[(uxIndexToNotify)]))
+#define traceTASK_NOTIFY_TAKE(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue[(uxIndexToWait)])
+#define traceTASK_NOTIFY_TAKE_BLOCK(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue[(uxIndexToWait)])
+#define traceTASK_NOTIFY_WAIT(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue[(uxIndexToWait)])
+#define traceTASK_NOTIFY_WAIT_BLOCK(uxIndexToWait) va_logtasknotifytake((void *)pxCurrentTCB, pxCurrentTCB->ulNotifiedValue[(uxIndexToWait)])
 
 // Queue tracing - unified approach using generic queue creation macro
 // FreeRTOS uses queues as the underlying mechanism for mutexes, semaphores, and queues

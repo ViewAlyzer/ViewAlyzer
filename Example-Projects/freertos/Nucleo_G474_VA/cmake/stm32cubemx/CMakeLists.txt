@@ -20,8 +20,6 @@ set(MX_Include_Dirs
     ${CMAKE_SOURCE_DIR}/Drivers/BSP/STM32G4xx_Nucleo
     ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Device/ST/STM32G4xx/Include
     ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Include
-    ${CMAKE_SOURCE_DIR}/../../ViewAlyzerRecorder/core
-    ${CMAKE_SOURCE_DIR}/../../ViewAlyzerRecorder/freertos
 )
 
 # STM32CubeMX generated application sources
