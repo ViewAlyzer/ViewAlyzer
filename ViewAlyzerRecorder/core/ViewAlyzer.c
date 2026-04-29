@@ -504,7 +504,6 @@ uint64_t _va_get_timestamp(void)
 {
     uint32_t high_part;
     uint32_t low_part;
-    uint32_t temp_low;
     uint32_t primask_state = __get_PRIMASK();
     __disable_irq();
 
