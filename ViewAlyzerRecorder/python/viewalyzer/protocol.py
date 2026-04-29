@@ -116,7 +116,7 @@ def build_user_function(func_id: int, is_entry: bool, timestamp: int) -> bytes:
 
 
 def build_string_event(msg_id: int, timestamp: int, message: str) -> bytes:
-    """StringEvent (0x0D) — 11 + N bytes (max 200 chars)."""
+    """StringEvent (0x0D) — 12 + N bytes (max 200 chars)."""
     mb = message.encode("ascii")[:200]
     return struct.pack("<BBQ", EVT_STRING_EVENT, msg_id,
-                       _ts_mask(timestamp)) + bytes([len(mb)]) + mb
+                       _ts_mask(timestamp)) + struct.pack("<H", len(mb)) + mb
