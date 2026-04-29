@@ -70,18 +70,40 @@ static char *_va_u32_to_str(char *buf, size_t buf_size, const char *prefix, uint
 }
 
 /* Lightweight "name_Suffix" concatenation (replaces snprintf("%s_Suffix")) */
-static void _va_strcat_suffix(char *buf, size_t buf_size, const char *name, const char *suffix)
+static void _va_strcat_suffix(char *buf, size_t buf_size,
+                             const char *name, const char *suffix)
 {
+    if (buf_size == 0) return;
+
     size_t nlen = strlen(name);
     size_t slen = strlen(suffix);
-    if (nlen + 1 + slen >= buf_size)
-        nlen = (nlen + 1 + slen >= buf_size && buf_size > slen + 2) ? buf_size - slen - 2 : nlen;
+
     size_t pos = 0;
-    if (nlen > 0) { memcpy(buf, name, nlen); pos = nlen; }
-    buf[pos++] = '_';
-    size_t copy = (pos + slen < buf_size) ? slen : buf_size - pos - 1;
-    memcpy(buf + pos, suffix, copy);
-    buf[pos + copy] = '\0';
+
+    /* If enough space, preserve suffix fully and trim name */
+    if (buf_size >= slen + 2) {
+        size_t max_nlen = buf_size - slen - 2; /* space for '_' + suffix + '\0' */
+        if (nlen > max_nlen) nlen = max_nlen;
+
+        if (nlen > 0) {
+            memcpy(buf, name, nlen);
+            pos = nlen;
+        }
+
+        buf[pos++] = '_';
+        memcpy(buf + pos, suffix, slen);
+        pos += slen;
+    }
+    else {
+        /* Not enough room for full suffix → truncate suffix */
+        size_t copy = buf_size - 1; /* leave space for '\0' */
+        if (copy > 0) {
+            memcpy(buf, suffix, copy);
+            pos = copy;
+        }
+    }
+
+    buf[pos] = '\0';
 }
 
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8M_BASE__)
@@ -494,12 +516,7 @@ uint64_t _va_get_timestamp(void)
     g_dwt_last_value = current_dwt;
     high_part = g_dwt_overflow_count;
     low_part = current_dwt;
-    temp_low = DWT->CYCCNT;
-    if (temp_low < low_part)
-    {
-        high_part = g_dwt_overflow_count;
-        low_part = temp_low;
-    }
+   
     __set_PRIMASK(primask_state);
     return (((uint64_t)high_part) << 32) | low_part;
 }
@@ -1153,10 +1170,11 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
         queueObjectMap[idx].type = type;
 
         char descriptiveName[VA_MAX_TASK_NAME_LEN];
-        const char *finalName = typeHint;
+        const char *finalName = NULL;
 
         if (typeHint != NULL && strlen(typeHint) > 0)
         {
+            finalName = typeHint;
             switch (type)
             {
             case VA_OBJECT_TYPE_MUTEX:
@@ -1174,6 +1192,10 @@ void va_updateQueueObjectType(void *queueObject, const char *typeHint)
                 break;
             }
         }
+
+        /* Fall back to the type name if no hint was provided */
+        if (finalName == NULL)
+            finalName = _va_get_object_type_name(type);
 
         strncpy(queueObjectMap[idx].name, finalName, VA_MAX_TASK_NAME_LEN - 1);
         queueObjectMap[idx].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
