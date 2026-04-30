@@ -1,4 +1,13 @@
-# Nucleo Zephyr Module
+# STM32 Zephyr ViewAlyzer Module — Full Demo
+
+Multi-board Zephyr application that exercises a wide slice of the ViewAlyzer
+Recorder: thread switches, mutex contention / priority-inversion, message
+queues, counting and binary semaphores, heap activity, a heartbeat timer,
+and several user traces / events.
+
+If you just want the minimum integration (one LED, one counter, one board),
+use [../STM32-Zephyr-VA-Module-HelloWorld](../STM32-Zephyr-VA-Module-HelloWorld)
+instead.
 
 For a follow-along setup guide, see [TUTORIAL.md](TUTORIAL.md).
 

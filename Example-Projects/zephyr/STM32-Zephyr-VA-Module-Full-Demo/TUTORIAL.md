@@ -2,7 +2,7 @@
 
 This tutorial shows two closely related workflows:
 
-1. Create a Zephyr application that uses ViewAlyzer as an external module, like this `STM32-Zephyr-VA-Module-Sample` project.
+1. Create a Zephyr application that uses ViewAlyzer as an external module, like this `STM32-Zephyr-VA-Module-Full-Demo` project.
 2. Add the same module integration to an existing Zephyr application.
 
 The goal is to give you something you can follow line by line and reproduce without guessing which pieces matter.
@@ -13,7 +13,7 @@ This project is not copying the recorder sources into the app.
 
 Instead, it points Zephyr at the ViewAlyzer module root:
 
-- app source lives here in `STM32-Zephyr-VA-Module-Sample`
+- app source lives here in `STM32-Zephyr-VA-Module-Full-Demo`
 - ViewAlyzer module source lives in `ViewAlyzer/ViewAlyzerRecorder`
 - Zephyr discovers that module through `ZEPHYR_EXTRA_MODULES`
 

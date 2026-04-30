@@ -28,6 +28,9 @@ out/
 output/
 dist/
 
+# Stray OpenOCD scratch directory created when openocd is run from a project root
+a/
+
 # CMake build artifacts
 CMakeCache.txt
 CMakeFiles/

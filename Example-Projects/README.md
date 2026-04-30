@@ -67,7 +67,8 @@ already available on disk.
 
 | Project | Boards | Notes |
 |---------|--------|-------|
-| [STM32-Zephyr-VA-Module-Sample](zephyr/STM32-Zephyr-VA-Module-Sample) | `nucleo_g474re`, `nucleo_f446re`, `nucleo_h503rb`, `stm32h750b_dk` | Wraps `west` via `build.py`, supports ITM/SWO and J-Link RTT |
+| [STM32-Zephyr-VA-Module-HelloWorld](zephyr/STM32-Zephyr-VA-Module-HelloWorld) | `nucleo_g474re` | Minimal integration (blink + one user trace). Start here. |
+| [STM32-Zephyr-VA-Module-Full-Demo](zephyr/STM32-Zephyr-VA-Module-Full-Demo) | `nucleo_g474re`, `nucleo_f446re`, `nucleo_h503rb`, `stm32h750b_dk` | Multi-board demo, wraps `west` via `build.py`, supports ITM/SWO and J-Link RTT |
 
 ### Expected Zephyr Layout
 
@@ -80,7 +81,8 @@ disk. The recommended layout is to put the Zephyr source as a sibling of the
 ├── ViewAlyzer/                 # this repository
 │   └── Example-Projects/
 │       └── zephyr/
-│           └── STM32-Zephyr-VA-Module-Sample/
+│           ├── STM32-Zephyr-VA-Module-HelloWorld/
+│           └── STM32-Zephyr-VA-Module-Full-Demo/
 └── zephyr/                     # Zephyr RTOS source tree (contains west.yml,
                                 #   kernel/, include/, boards/, ...)
 ```
@@ -94,13 +96,13 @@ The sample's `build.py` will automatically locate Zephyr by:
 
 If you cloned this repo at a non-standard location, set `ZEPHYR_BASE` or edit
 `ZEPHYR_BASE_OVERRIDE` in `build.py`. See the project's own
-[README](zephyr/STM32-Zephyr-VA-Module-Sample/README.md) and
-[TUTORIAL](zephyr/STM32-Zephyr-VA-Module-Sample/TUTORIAL.md) for details.
+[README](zephyr/STM32-Zephyr-VA-Module-Full-Demo/README.md) and
+[TUTORIAL](zephyr/STM32-Zephyr-VA-Module-Full-Demo/TUTORIAL.md) for details.
 
 Build (typical):
 
 ```bash
-cd zephyr/STM32-Zephyr-VA-Module-Sample
+cd zephyr/STM32-Zephyr-VA-Module-Full-Demo
 python3 build.py            # default G4 build
 python3 build.py build h7   # H7 build
 python3 build.py flash g4   # flash via OpenOCD/ST-Link

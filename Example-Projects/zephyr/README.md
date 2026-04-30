@@ -4,9 +4,10 @@ Standalone Zephyr applications that use the ViewAlyzer Recorder as an
 external Zephyr module. They expect a Zephyr checkout on disk; see
 [../README.md](../README.md#zephyr) for the recommended layout.
 
-| Project | Boards |
-|---------|--------|
-| [STM32-Zephyr-VA-Module-Sample](STM32-Zephyr-VA-Module-Sample) | `nucleo_g474re`, `nucleo_f446re`, `nucleo_h503rb`, `stm32h750b_dk` |
+| Project | Boards | Notes |
+|---------|--------|-------|
+| [STM32-Zephyr-VA-Module-HelloWorld](STM32-Zephyr-VA-Module-HelloWorld) | `nucleo_g474re` | Smallest possible integration: blink an LED, log one user trace. Start here. |
+| [STM32-Zephyr-VA-Module-Full-Demo](STM32-Zephyr-VA-Module-Full-Demo) | `nucleo_g474re`, `nucleo_f446re`, `nucleo_h503rb`, `stm32h750b_dk` | Multi-board demo with mutexes, queues, semaphores, priority-inversion, schemas, and a `build.py` west wrapper. |
 
 ## Expected Layout
 
