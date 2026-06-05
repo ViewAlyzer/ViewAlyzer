@@ -86,3 +86,19 @@ Thumbs.db
 # OS generated files
 .Trash-*
 .nfs*
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Tooling scratch / caches (clangd, bluepill, agent memory & workflow dirs)
+.cache/
+.bluepill/
+memory/
+# Ignore stray "workflows/" scratch dirs, but never GitHub Actions CI:
+workflows/
+!.github/workflows/
+
+# Generated demo artifacts
+*.csv
+trace-report.md
