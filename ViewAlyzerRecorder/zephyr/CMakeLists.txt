@@ -41,7 +41,14 @@ if(CONFIG_VIEWALYZER)
     zephyr_compile_definitions(VA_ALLOWED_TO_DISABLE_INTERRUPTS=0)
   endif()
 
-  zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:-include${VIEWALYZER_MODULE_DIR}/zephyr/tracing_user.h>)
+  # Do NOT globally force-include tracing_user.h. It is redundant: kernel.h ->
+  # tracing/tracing.h does `#include "tracing_user.h"` under CONFIG_TRACING_USER,
+  # and the `include_directories(BEFORE ...)` below makes our copy win (same
+  # _TRACE_USER_H guard as the stock header). A global -include also leaks
+  # <zephyr/kernel.h> into Zephyr's own bootstrap TUs; on Zephyr >= 4.3 that
+  # breaks the lib/heap heap_constants.c step (it runs before kernel.h's
+  # generated <zephyr/heap_constants.h> exists). The BEFORE include path wires
+  # the recorder identically on 4.1 and 4.3 without that hazard.
 
   zephyr_include_directories(
     ${VIEWALYZER_MODULE_DIR}/core
