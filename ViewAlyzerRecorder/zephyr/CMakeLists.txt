@@ -41,21 +41,26 @@ if(CONFIG_VIEWALYZER)
     zephyr_compile_definitions(VA_ALLOWED_TO_DISABLE_INTERRUPTS=0)
   endif()
 
-  # Do NOT globally force-include tracing_user.h. It is redundant: kernel.h ->
-  # tracing/tracing.h does `#include "tracing_user.h"` under CONFIG_TRACING_USER,
-  # and the `include_directories(BEFORE ...)` below makes our copy win (same
-  # _TRACE_USER_H guard as the stock header). A global -include also leaks
-  # <zephyr/kernel.h> into Zephyr's own bootstrap TUs; on Zephyr >= 4.3 that
-  # breaks the lib/heap heap_constants.c step (it runs before kernel.h's
-  # generated <zephyr/heap_constants.h> exists). The BEFORE include path wires
-  # the recorder identically on 4.1 and 4.3 without that hazard.
-
-  zephyr_include_directories(
-    ${VIEWALYZER_MODULE_DIR}/core
+  # Our tracing_user.h must shadow Zephyr's stock subsys/tracing/user copy
+  # (same _TRACE_USER_H guard, first-found wins). The mutex/heap trace points
+  # expand inside Zephyr's OWN kernel TUs (kernel/mutex.c, the heap code) via
+  # kernel.h -> tracing/tracing.h -> `#include "tracing_user.h"`, so our dir
+  # must precede subsys/tracing/user on the include path of *those* TUs too.
+  #
+  # `include_directories(BEFORE ...)` is directory-scoped to this module and
+  # does NOT reach the `kernel` target, so it loses there. Prepend to the
+  # global zephyr_interface include path instead. Note: zephyr_include_
+  # directories(BEFORE ...) does not work — that helper hardcodes INTERFACE
+  # before ${ARGV}, mis-placing BEFORE — so call target_include_directories
+  # directly. No global -include is used, so nothing leaks <zephyr/kernel.h>
+  # into Zephyr's bootstrap TUs (the lib/heap heap_constants.c hazard on >=4.3).
+  target_include_directories(zephyr_interface BEFORE INTERFACE
     ${VIEWALYZER_MODULE_DIR}/zephyr
   )
 
-  include_directories(BEFORE ${VIEWALYZER_MODULE_DIR}/zephyr)
+  zephyr_include_directories(
+    ${VIEWALYZER_MODULE_DIR}/core
+  )
 
   zephyr_library_include_directories(
     ${VIEWALYZER_MODULE_DIR}/core

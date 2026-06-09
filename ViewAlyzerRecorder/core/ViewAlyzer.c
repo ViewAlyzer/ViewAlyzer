@@ -1566,7 +1566,13 @@ void VA_Init(uint32_t cpu_freq)
     _va_enable_dwt_counter();
 
 #if VA_TRANSPORT_IS_ITM
+    /* CoreSight software lock (Lock Access Register) exists only on ARMv7-M
+       (Cortex-M3/M4/M7). ARMv8-M (Cortex-M23/M33/M55) removed it, and CMSIS-6
+       drops LAR from ITM_Type — writing it there fails to compile. The unlock
+       is a no-op on ARMv8-M, so skip it. */
+#if !defined(__ARM_ARCH_8M_MAIN__) && !defined(__ARM_ARCH_8M_BASE__) && !defined(__ARM_ARCH_8_1M_MAIN__)
     ITM->LAR = 0xC5ACCE55;
+#endif
     ITM->TCR |= ITM_TCR_ITMENA_Msk;
     ITM->TER |= (1UL << VA_ITM_PORT);
 #elif VA_TRANSPORT_IS_JLINK
