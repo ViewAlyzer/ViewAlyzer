@@ -152,6 +152,20 @@ static void _va_strcat_suffix(char *buf, size_t buf_size,
     } VA_UserEventMapEntry_t;
     static VA_UserEventMapEntry_t userEventMap[VA_MAX_USER_EVENTS];
 
+    // User trace registry (Independent of RTOS). Registrations are stored so
+    // VA_EmitSetupBundle() can re-emit the id->name/type maps periodically —
+    // without this, a host that attaches after boot (live attach, or a fused
+    // ETM+ITM capture window) never learns the names and falls back to
+    // synthetic "USER_<id>" labels.
+    typedef struct
+    {
+        uint8_t id;
+        uint8_t type;                       /* VA_UserTraceType_t */
+        char name[VA_MAX_TASK_NAME_LEN];
+        bool active;
+    } VA_UserTraceMapEntry_t;
+    static VA_UserTraceMapEntry_t userTraceMap[VA_MAX_USER_EVENTS];
+
 #if VA_HAS_RTOS
     // --- Queue / sync-object map (RTOS-agnostic storage, adapter determines type) ---
     VA_QueueObjectMapEntry_t queueObjectMap[VA_MAX_SYNC_OBJECTS];
@@ -239,6 +253,14 @@ static inline void _va_emit_packet_raw(const uint8_t *data, uint32_t length)
 
 void _va_emit_packet(const uint8_t *data, uint32_t length)
 {
+    /* The triggering packet goes out FIRST, the periodic bundle after it.
+     * The packet's position on the wire is what time-correlation (fused
+     * ETM+ITM captures) anchors on — emitting the bundle first would place
+     * an event's bytes hundreds of ms after the code that logged it, so a
+     * "jump to cause" lands in the bundle loop instead of the caller. The
+     * host's sync scanning is order-agnostic, so parsing is unaffected. */
+    _va_emit_packet_raw(data, length);
+
 #if VA_AUTO_SETUP_INTERVAL_MS > 0
     if (!_va_emitting_bundle && _va_cpu_freq > 0)
     {
@@ -253,7 +275,6 @@ void _va_emit_packet(const uint8_t *data, uint32_t length)
         }
     }
 #endif
-    _va_emit_packet_raw(data, length);
 }
 
 /* ================================================================
@@ -570,6 +591,27 @@ void VA_EmitSetupBundle(void)
         }
     }
 #endif
+
+    /* User trace + user event registrations (RTOS-independent): re-emit the
+     * stored maps so hosts that attach mid-run (live attach, fused ETM+ITM
+     * capture windows) resolve ids to real names instead of fallbacks. */
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
+    {
+        if (userTraceMap[i].active)
+        {
+            if (userTraceMap[i].type == (uint8_t)VA_USER_TYPE_ISR)
+                _va_send_setup_packet(VA_SETUP_ISR_MAP, userTraceMap[i].id,
+                                      userTraceMap[i].name);
+            else
+                _va_send_user_setup_packet(userTraceMap[i].id, userTraceMap[i].type,
+                                           userTraceMap[i].name);
+        }
+        if (userEventMap[i].active)
+        {
+            _va_send_setup_packet(VA_SETUP_USER_EVENT_MAP, userEventMap[i].id,
+                                  userEventMap[i].name);
+        }
+    }
 
     VA_CS_EXIT();
 }
@@ -912,6 +954,25 @@ void VA_RegisterUserTrace(uint8_t id, const char *name, VA_UserTraceType_t type)
         VA_CS_EXIT();
         return;
     }
+
+    /* Remember (or update) the registration so the periodic setup bundle can
+     * re-emit it for late-attaching hosts. Full registry => emit-only (the
+     * one-shot packet below still goes out). */
+    int slot = -1;
+    for (int i = 0; i < VA_MAX_USER_EVENTS; ++i)
+    {
+        if (userTraceMap[i].active && userTraceMap[i].id == id) { slot = i; break; }
+        if (slot < 0 && !userTraceMap[i].active) slot = i;
+    }
+    if (slot >= 0)
+    {
+        userTraceMap[slot].active = true;
+        userTraceMap[slot].id = id;
+        userTraceMap[slot].type = (uint8_t)type;
+        strncpy(userTraceMap[slot].name, name, VA_MAX_TASK_NAME_LEN - 1);
+        userTraceMap[slot].name[VA_MAX_TASK_NAME_LEN - 1] = '\0';
+    }
+
     if (type == VA_USER_TYPE_ISR)
         _va_send_setup_packet(VA_SETUP_ISR_MAP, id, name);
     else
